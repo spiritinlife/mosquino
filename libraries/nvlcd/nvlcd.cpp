@@ -22,7 +22,7 @@ typedef struct
   uint8_t AAIdle;
   uint8_t DrivePW;
   uint8_t Voltage;
-} 
+}
 tcTableEntry;
 #define TEMP_PTS (sizeof(tcTable)/sizeof(tcTable[0])) // # of table entries.
 #define TEMP_MAX (tcTable[0].Temp+5) // Max update temp (C).
@@ -44,62 +44,55 @@ static const tcTableEntry tcTable[] =
   // Temp VAClear VAIdle AAclear AAIdle Drive Voltage
   // ---- ------- ------ ------- ------ ----- -------
   // 45 50 2 20 6 10 24
-  { 
+  {
     45, 0x12, 0x05, 0x0D, 0x07, 0x09, 0x40  }
   ,
   // ---- ------- ------ ------- ------ ----- -------
   // 40 60 2 25 6 12 24
-  { 
+  {
     40, 0x13, 0x05, 0x0E, 0x07, 0x0A, 0x40  }
   ,
   // ---- ------- ------ ------- ------ ----- -------
   // 35 80 2 30 6 14 24
-  { 
+  {
     35, 0x14, 0x05, 0x0F, 0x07, 0x0B, 0x40  }
   ,
   // ---- ------- ------ ------- ------ ----- -------
   // 30 100 2 40 6 20 24
-  { 
+  {
     30, 0x15, 0x05, 0x11, 0x07, 0x0D, 0x40  }
   ,
   // ---- ------- ------ ------- ------ ----- -------
   // 25 100 2 40 6 20 24
-  { 
+  {
     25, 0x15, 0x05, 0x11, 0x07, 0x0D, 0x40  }
   ,
   // ---- ------- ------ ------- ------ ----- -------
   // 20 150 2 50 6 25 24
-  { 
+  {
     20, 0x16, 0x05, 0x12, 0x07, 0x0E, 0x40  }
   ,
   // ---- ------- ------ ------- ------ ----- -------
   // 15 150 2 60 6 35 24
-  { 
+  {
     15, 0x16, 0x05, 0x13, 0x07, 0x10, 0x40  }
   ,
   // ---- ------- ------ ------- ------ ----- -------
   // 10 250 2 100 6 50 24
-  { 
+  {
     10, 0x18, 0x05, 0x15, 0x07, 0x12, 0x40  }
   ,
   // ---- ------- ------ ------- ------ ----- -------
   // 5 350 4 150 10 80 24
-  { 
+  {
     5, 0x19, 0x06, 0x16, 0x09, 0x14, 0x40  }
   ,
   // ---- ------- ------ ------- ------ ----- -------
   // 0 500 6 200 18 100 24
-  { 
+  {
     0, 0x1A, 0x07, 0x17, 0x0C, 0x15, 0x40  }
   // ---- ------- ------ ------- ------ ----- -------
 };
-
-
-
-
-
-
-
 
 
 
@@ -117,31 +110,59 @@ NVLCD::NVLCD(byte _cs_pin, byte _busy_pin, byte _c_d_pin, byte _reset_pin, byte 
     sck_pin = _sck_pin;
     mosi_pin = _mosi_pin;
 
+    if(sck_pin > 127 || mosi_pin > 127) // if user enters nonvalid or '-1' value
+    {
+      // attempt to use SPI standard library
+      spi_putc_type = SPI_PUTC_STD_SPI;
+    }
+    else
+    {
+      spi_putc_type = SPI_PUTC_BITBANG;
+    }
     init();
 
-    pWriteFunc = NULL; //&lcd_bitbang;
+    //pWriteFunc = NULL; //&lcd_bitbang;
 
 }
-NVLCD::NVLCD(byte _cs_pin, byte _busy_pin, byte _c_d_pin, byte _reset_pin, byte _pwr_pin, byte _gnd_pin, FuncPtr _pWriteFunc)
+NVLCD::NVLCD(byte _cs_pin, byte _busy_pin, byte _c_d_pin, byte _reset_pin, byte _pwr_pin, byte _gnd_pin)
 {
-
-
     cs_pin = _cs_pin;
     busy_pin = _busy_pin;
     c_d_pin = _c_d_pin;
     reset_pin = _reset_pin;
     pwr_pin = _pwr_pin;
     gnd_pin = _gnd_pin;
-    sck_pin = 0xFF;
-    mosi_pin = 0xFF;
+    sck_pin = 0;
+    mosi_pin = 0;
 
-    pWriteFunc = _pWriteFunc;
-    init_pins();
-    off();
+    // No SPI pins given for constructor, so attempt to use SPI standard library
+    spi_putc_type = SPI_PUTC_STD_SPI;
+
+    //pWriteFunc = _pWriteFunc;
+    init();
+
 }
 
 
 /*------ Basic Functions -----*/
+
+void NVLCD::set_font(Font_t _font)
+{
+   font = _font;
+
+   if(font != NULL)
+   {
+        // retrieve important font parameters so they don't have to be fetched for each character written
+
+        font_width = pgm_read_byte(&font[FONT_FIXED_WIDTH]);
+        font_height = pgm_read_byte(&font[FONT_HEIGHT]);
+        font_first_char = pgm_read_byte(&font[FONT_FIRST_CHAR]);
+
+        //byte char_width_bytes = width; // 1 byte -> 1 col (8 px vertical)
+        char_height_bytes = (font_height+7) / 8; // round up
+   }
+}
+
 
 void NVLCD::reset(void)
 {
@@ -152,6 +173,7 @@ void NVLCD::reset(void)
 
 void NVLCD::init(void)
 {
+
     init_pins();
     off();
     temp_comp_value = 22; // default temp. compensation value in degC. HACK: FIXME: Hack around with the Solomon chip
@@ -159,16 +181,32 @@ void NVLCD::init(void)
     h_flip_value = 0;
     v_flip_value = 0;
     invert_value = 0x00;
+    font = NULL;
 
+    if(spi_putc_type == SPI_PUTC_STD_SPI)
+    {
+       //Check if SPI has already been initialized and begin() it if not.
+       if(!(SPCR & _BV(SPE)))
+       {
+          // SPI not initialized yet; set it up for our display
+
+          SPI.begin();
+          SPI.setBitOrder(MSBFIRST);
+          SPI.setDataMode(0);
+          SPI.setClockDivider(SPI_CLOCK_DIV4);
+       }
+    }
 }
 
 void NVLCD::on(void)
 {
-  digitalWrite(pwr_pin, HIGH);
+  if(pwr_pin < 128)
+     digitalWrite(pwr_pin, HIGH);
 }
 void NVLCD::off(void)
 {
-  digitalWrite(pwr_pin, LOW);
+  if(pwr_pin < 128)
+     digitalWrite(pwr_pin, LOW);
 }
 
 void NVLCD::set_temp_comp(int v)
@@ -178,12 +216,13 @@ void NVLCD::set_temp_comp(int v)
 
 void NVLCD::clear(void)
 {
-  byte i,j;
+  uint8_t i;
+  uint8_t j;
   home();
   set_seg_mapping();
   for (i=0; i<N_PAGES; i++)
   {
-    set_line(i);
+    set_page(i);
     set_col(0);
     lcd_mode_data();
     for(j=0; j<N_COLS; j++)
@@ -280,11 +319,11 @@ void NVLCD::commit(int x1, int y1, int x2, int y2)
   byte AAIdle;
   byte ClearV;
 
-  byte offset;
-  byte startLineCmd;
+  uint8_t offset;
+  uint8_t startLineCmd;
 
-  byte firstRow = x1; // FIXME: redundant...
-  byte numRows = x2 - x1;
+  uint8_t firstRow = x1;
+  uint8_t numRows = x2 - x1;
 
   // Get /*and upload*/ current TC data
 
@@ -394,12 +433,10 @@ void NVLCD::commit(int x1, int y1, int x2, int y2)
   // Delay to allow dc/dc reach voltage.
   // Rise time to 25V with Vin = 2.4V is 280 msec.
   // Rise time to 25V with Vin = 3.3V is 160 msec.
-  //digitalWrite(27, HIGH);
 
   // FIXME: should we have a voltage compensation table too?
-  //Delay(MS2TCK(300));
+
   delay(300);
-  //digitalWrite(27, LOW);
 
   // Set up update.
   lcd_write( 0x93 );
@@ -480,10 +517,10 @@ void NVLCD::home(void)
 {
   set_cursor(0,0);
 }
-void NVLCD::set_line(byte page)
+void NVLCD::set_page(byte page)
 {
   // This and many other LCD operate in 'pages' (each input byte supplies data for 8 vertical lines)
-  // There is no concept of discrete 'lines' unless you get very ugly splitting up data between pages.
+  // There is no concept of discrete 'lines' unless you get ugly splitting up data between pages.
   // FIXME: Try to harmonize lines and pages...
   lcd_mode_cmd();
   lcd_write(PAGE_ADD | (page+1));
@@ -504,7 +541,7 @@ void NVLCD::set_col(byte col)
 
 void NVLCD::set_cursor(byte row, byte col)
 {
-  set_line(row);
+  set_page(row/8);
   set_col(col);
 }
 
@@ -512,26 +549,116 @@ void NVLCD::set_cursor(byte row, byte col)
 
 void NVLCD::putch(byte c)
 {
+     Serial.print("Got byte: ");
+     Serial.print(c);
+     // only supporting fixed size font for now
+     //if( font[FONT_LENGTH] == 0 && font[FONT_LENGTH+1] == 0)
+     {
+
+
+        //byte width = pgm_read_byte(&font[FONT_FIXED_WIDTH]);
+        //byte height = pgm_read_byte(&font[FONT_HEIGHT]);
+        //byte first_char = pgm_read_byte(&font[FONT_FIRST_CHAR]);
+
+        //Serial.print("\nWidth: ");
+        //Serial.print(width, HEX);
+        //Serial.print("  Height: ");
+        //Serial.print(height, HEX);
+
+	byte line=0;
+	byte temp=0;
+
+
+        if(c >= font_first_char)
+        {
+           // resolve ASCII value to character index in font
+           c = c - font_first_char;
+
+           // index the *byte* in font corresponding to this index
+           // NB: fonts can be > 8 pixels tall and/or wide.
+
+           //byte char_width_bytes = width; // 1 byte -> 1 col (8 px vertical)
+           //byte char_height_bytes = (height+7) / 8; // round up
+
+           //byte char_total_bytes
+
+           // >8 wide -> (char, char+1, ... in font data)
+           // >8 tall -> multiple lines (char, char+1, ... in font data)
+
+           // First byte: c * (char_width_bytes * char_height_bytes)
+           for(int row=0; row < char_height_bytes; row++)
+           {
+              // FIXME: advance cursor column here if multiline fonts...
+              for(int col=0; col < font_width; col++)
+              {
+                //Serial.print("row=");
+                //Serial.print(row, DEC);
+                //Serial.print("  col=");
+                //Serial.print(col, DEC);
+                int k = (c * (font_width * char_height_bytes) + (row * char_height_bytes) + col)    + 6; // 6 fluff bytes at the start of each font
+                //Serial.print("  idx=");
+                //Serial.print(k, DEC);
+
+                byte cha = pgm_read_byte(&font[k]);
+                //Serial.print("  val=");
+                //Serial.print(cha, HEX);
+                //Serial.println(" ");
+                lcd_write(cha ^ invert_value);
+              }
+           }
+
+        }
+
+     }
 
 }
 
 void NVLCD::putch_P(PGM_P pc)
 {
-
+  putch(pgm_read_byte(pc));
 }
 
-void NVLCD::puts(const char *s)
+void NVLCD::puts(const char * s)
 {
-
+     // print a string from RAM
+  Serial.print("String addr:");
+  Serial.print((long int)s, HEX);
+  Serial.println();
+    set_seg_mapping();
+    lcd_mode_data();
+    while(*s != 0)
+    {
+       putch(*s);
+       //*s++;
+       s++;
+    }
 }
 
-void NVLCD::puts_P(PGM_P ps)
-{
 
-}
-void NVLCD::pixmap(char * pImg, int col, int page) // NOTE: 'Page' is an 8px vertical boundary.
+
+
+void NVLCD::puts_P(PGM_P s)
 {
-	//const rom char *charptr;
+     // print a string from code memory
+    byte c;
+  Serial.print("String addr:");
+  Serial.print((long int)s, HEX);
+  Serial.println();
+
+    set_seg_mapping();
+    lcd_mode_data();
+    while((c = pgm_read_byte(s)) != 0)
+    {
+       putch(c);
+       s++;
+    }
+}
+
+
+
+//void NVLCD::pixmap(char * pImg, int col, int page) // NOTE: 'Page' is an 8px vertical boundary.
+void NVLCD::pixmap(int row, int col, const char * pImg) // NOTE: 'Page' is an 8px vertical boundary.
+{
 	byte xsize=pImg[0];
 	byte ysize=pImg[1];
 
@@ -544,7 +671,7 @@ void NVLCD::pixmap(char * pImg, int col, int page) // NOTE: 'Page' is an 8px ver
 	for (yy=0; yy<ysize/8; yy++)
 	{
 		// handle pages
-		set_line(yy+page);
+		set_page(yy+(row/8));
 		set_col(col);
                 lcd_mode_data();
 		for (xx=0; xx<xsize; xx++)
@@ -555,11 +682,9 @@ void NVLCD::pixmap(char * pImg, int col, int page) // NOTE: 'Page' is an 8px ver
 	}
 }
 
-void NVLCD::pixmap_P(PGM_P pImg, int col, int page) // NOTE: 'Page' is an 8px vertical boundary.
+//void NVLCD::pixmap_P(PGM_P pImg, int col, int page) // NOTE: 'Page' is an 8px vertical boundary.
+void NVLCD::pixmap_P(int row, int col, PGM_P pImg) // NOTE: 'Page' is an 8px vertical boundary.
 {
-	//const rom char *charptr;
-	//byte xsize=pImg[0];
-	//byte ysize=pImg[1];
         byte xsize = pgm_read_byte(&pImg[0]);
         byte ysize = pgm_read_byte(&pImg[1]);
 	byte xx=0;
@@ -571,13 +696,12 @@ void NVLCD::pixmap_P(PGM_P pImg, int col, int page) // NOTE: 'Page' is an 8px ve
 	for (yy=0; yy<ysize/8; yy++)
 	{
 		// handle pages
-		set_line(yy+page);
+		set_page(yy+(row/8));
 		set_col(col);
                 lcd_mode_data();
 		for (xx=0; xx<xsize; xx++)
 		{
 			//handle columns
-			//lcd_write(*pImg++ ^ invert_value);
                         lcd_write(pgm_read_byte(pImg++) ^ invert_value);
 
 		}
@@ -591,17 +715,23 @@ void NVLCD::cr(void) // display-specific carriage return implementation
 {
 }
 
-// Bitbang LCD serial data using I/O lines. It would be much nicer to use actual serial lines and just WriteSPI(data);....
+// Serial write or bitbang LCD serial data using I/O lines.
 void NVLCD::lcd_write(byte v)
 {
-  // HACK HACK HACK: Not brave enough to test the funcptr yet...
-  lcd_bitbang(v);
+  if(spi_putc_type == SPI_PUTC_STD_SPI)
+  {
+     // Assert chip select to display.
+     // The driver seems to require a new chip select to start each byte.
+     select();
+     SPI.transfer(v);
+     deselect();
+  }
+  else
+  {
+     lcd_bitbang(v);
+  }
 }
 
-////// Declared static in nvlcd.h so we can use it in function pointers.
-////// Ref: http://www.parashift.com/c++-faq-lite/pointers-to-members.html
-// Arrgh; can't do this and still access the pin #s stored with the instance.
-// Plan B...
 void NVLCD::lcd_bitbang(byte data)
 {
   byte mask;
@@ -650,15 +780,6 @@ void NVLCD::deselect()
   digitalWrite(cs_pin, HIGH);
 }
 
-
-//void NVLCD::lcd_send_cmd(byte)
-//{
-//}
-
-//void NVLCD::lcd_send_data(byte)
-//{
-//}
-
 void NVLCD::wait_for_ready()
 {
   // stall until BUSY is low
@@ -667,18 +788,23 @@ void NVLCD::wait_for_ready()
 
 void NVLCD::init_pins()
 {
-  if(gnd_pin > 0 && gnd_pin < 0xFF)
+  if(gnd_pin < 128)
   {
       pinMode(gnd_pin, OUTPUT);
       digitalWrite(gnd_pin, LOW);
-
+  }
+  if(pwr_pin < 128)
+  {
       pinMode(pwr_pin, OUTPUT);
       digitalWrite(pwr_pin, LOW);
   }
   pinMode(busy_pin, INPUT);
 
-  pinMode(mosi_pin, OUTPUT);
-  pinMode(sck_pin, OUTPUT);
+  if(spi_putc_type == SPI_PUTC_BITBANG)
+  {
+      pinMode(mosi_pin, OUTPUT);
+      pinMode(sck_pin, OUTPUT);
+  }
 
   pinMode(reset_pin, OUTPUT);
   pinMode(cs_pin, OUTPUT);
@@ -686,4 +812,14 @@ void NVLCD::init_pins()
 
 }
 
+// stolen from GLCD
+/*
+ * needed to resolve virtual print functions
+ */
+void NVLCD::write(uint8_t c) // for Print base class
+{
+     Serial.print(" write:");
+     Serial.print(c);
+     putch(c);
+}
 
