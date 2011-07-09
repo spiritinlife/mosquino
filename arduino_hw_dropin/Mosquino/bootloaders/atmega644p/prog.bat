@@ -1,0 +1,1 @@
+avrdude -b 19200 -p atmega644p -C J:\arduino-0022\hardware\tools\avr\etc\avrdude.conf -c stk500v1 -P COM4 -U flash:w:ATmegaBOOT_644P.hex:i

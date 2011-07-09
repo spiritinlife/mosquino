@@ -5,6 +5,9 @@
 /* should work with other mega's, see code for details    */
 /*                                                        */
 /* ATmegaBOOT.c                                           */
+/* 20110618: Updated for Mosquino rev2 PFULL\ as          */
+/*           BUS_SENSE and clock control.                 */
+/*           Tim Gipson (Drmn4ea)                         */
 /* 20100926: Added Mosquino boot mods and define; added   */
 /*           'noreturn' to main to trim code size.        */
 /*           Tim Gipson (Drmn4ea)                         */
@@ -106,10 +109,10 @@
 // Mosquino includes a BUS_SENSE input to detect if USB/serial0 is connected.
 // If not, immediately exits bootloader to reduce startup power consumption.
 #ifdef MOSQUINO
-    #define BUS_SENSE_DDR  DDRD
-    #define BUS_SENSE_PORT PORTD
-    #define BUS_SENSE_PIN  PIND
-    #define BUS_SENSE      PIND7
+    #define BUS_SENSE_DDR  DDRB
+    #define BUS_SENSE_PORT PORTB
+    #define BUS_SENSE_PIN  PINB
+    #define BUS_SENSE      PINB1
 #endif
 
 /* define various device id's */
@@ -173,23 +176,28 @@ void main(void)
 {
     uint8_t ch,ch2;
     uint16_t w;
-	uint16_t i;
+    uint16_t i;
 
     asm volatile("nop\n\t");
 
-// The '644 provides the option to startup on the internal osc at either 8MHz or 1MHz.
-// 4MHz or less is required for 1.8v operation. Thus if using INTOSC, we startup at 1MHz, then kick up to
-// 4MHz for the bootloader. User code can adjust it further if needed.
+// The '644 provides the option to startup on the default oscillator at either native speed (8MHz for intosc) or divided-by-8. 
+// After powerup, the exact clock division can be adjusted in software.
 
-// Note that this is not a concern when running from a xtal already at 4MHz.
+// 4MHz or less is required for 1.8v operation. Thus if using INTOSC (or other 8MHz), we startup at 1MHz, then kick up to
+// 4MHz for the bootloader.
+
+// Mosquino rev2 default is an 8MHz external xtal, so startup with CKDIV8 fuse set and change to /2 (4MHz).
+// User code can set it higher if <3.3V operation is not expected.
 
 //"The CLKPCE bit must be written to logic one to enable change of the CLKPS bits. The CLKPCE
 //bit is only updated when the other bits in CLKPR are simultaneously written to zero. CLKPCE is
 //cleared by hardware four cycles after it is written or when CLKPS bits are written."
+#ifdef MOSQUINO
 
-    //CLKPR = 0x80;
-    //CLKPR = (1<<CLKPCE); // why would it matter?
-    //CLKPR = 0x01;
+    CLKPR = (1<<CLKPCE); // arm CLKPSx writes
+    CLKPR = 0x01;        // 0b0000 0001 -> divide by 2
+
+#endif
 
 #ifdef ADABOOT		// BBR/LF 10/8/2007 & 9/13/2008
     ch = MCUSR;
@@ -207,13 +215,14 @@ void main(void)
     // HACK TRG 20100709 for Mosquino:
     // Pin is used to detect if external bus/power is applied. If not, jump immediately out of bootloader
     // (don't waste power trying to bootload when no bus is present)
+    // NOTE: BUS_SENSE\ / PFULL\ signal is active-low.
+
     BUS_SENSE_DDR &= ~_BV(BUS_SENSE);
     asm volatile("nop\n\t"); // pin "should" have been an input already, but if not, wait a tick and ensure its voltage has come up
-    if(!(BUS_SENSE_PIN & _BV(BUS_SENSE)))
+    if((BUS_SENSE_PIN & _BV(BUS_SENSE)))
     {
       app_start();
     }
-
 #endif
 
 	//initialize our serial port.
@@ -240,7 +249,7 @@ void main(void)
 
 	#ifdef	ADABOOT
 		flash_led(ADABOOT_VER);		// BBR 9/13/2008
-	#endif 
+	#endif
 
     /* forever loop */
     for (;;)
@@ -250,7 +259,7 @@ void main(void)
 
 		/* A bunch of if...else if... gives smaller code than switch...case ! */
 
-		/* Hello is anyone home ? */ 
+		/* Hello is anyone home ? */
 		if(ch=='0')
 		    nothing_response();
 

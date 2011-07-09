@@ -1,13 +1,16 @@
 ##############################################################
 
-mosquino.name=mosquino
+mosquino.name=Mosquino
 mosquino.upload.protocol=stk500
 mosquino.upload.maximum_size=63488
 mosquino.upload.speed=19200
 # external osc, CKDIV8 off
-mosquino.bootloader.low_fuses=0xf7
+#mosquino.bootloader.low_fuses=0xf7
+# external osc, CKDIV8 on
+mosquino.bootloader.low_fuses=0x77
 mosquino.bootloader.high_fuses=0xDC
-mosquino.bootloader.extended_fuses=0xFE
+#mosquino.bootloader.extended_fuses=0xFE
+mosquino.bootloader.extended_fuses=0xFF
 mosquino.bootloader.path=atmega644p
 mosquino.bootloader.file=ATmegaBOOT_644P.hex
 mosquino.bootloader.unlock_bits=0x3F
