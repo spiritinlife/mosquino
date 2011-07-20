@@ -42,10 +42,10 @@
 
 
 
-const static uint8_t SS   = 12;
-const static uint8_t MOSI = 11;
-const static uint8_t MISO = 10;
-const static uint8_t SCK  = 9;
+const static uint8_t SS   = 15;
+const static uint8_t MOSI = 14;
+const static uint8_t MISO = 13;
+const static uint8_t SCK  = 12;
 
 
 extern const uint8_t PROGMEM port_to_mode_PGM[];
