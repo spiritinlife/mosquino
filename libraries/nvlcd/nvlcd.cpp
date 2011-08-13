@@ -1,3 +1,68 @@
+/*
+   NVLCD Bistable Graphics Display Library, for use with Kent Displays Inc.
+     bistable cholesteric LCD module (128x32, p/n 01594101208 and compatible (Solomon Systech controller)).
+   Arduino library Copyright (c) 2011 Tim Gipson (drmn4ea at google mail)
+
+   Fonts (if any) included with this distribution are derived from the GLCD library,
+   available at <http://code.google.com/p/glcd-arduino>.
+
+  NVLCD is free software: you can redistribute it and/or modify
+  it under the terms of the GNU Lesser General Public License as published by
+  the Free Software Foundation, either version 2.1 of the License, or
+  (at your option) any later version.
+
+  NVLCD is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU Lesser General Public License for more details.
+
+  You should have received a copy of the GNU Lesser General Public License
+  along with NVLCD.  If not, see <http://www.gnu.org/licenses/>.
+
+
+   Portions of the 'display_commit() function Copyright (c) Kent Displays, Inc. as described below.
+*/
+
+
+/* ****************************************************************************
+   Copyright (c) 2009. Kent Displays, Inc. All Rights Reserved.
+
+   Permission to use, copy, modify, and distribute this software and its
+   documentation for any purpose, without fee, and without a written
+   agreement, is hereby granted, provided that the above copyright notice,
+   this paragraph, and the following two paragraphs appear in all copies,
+   modifications, and distributions and is included with a Kent Displays,
+   Inc. product.
+
+   IN NO EVENT SHALL KENT DISPLAYS, INC. BE LIABLE TO ANY PARTY FOR DIRECT,
+   INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, INCLUDING
+   LOST PROFITS, ARISING OUT OF THE USE OF THIS SOFTWARE AND ITS
+   DOCUMENTATION, EVEN IF KENT DISPLAYS, INC. HAS BEEN ADVISED OF THE
+   POSSIBILITY OF SUCH DAMAGE.
+
+   KENT DISPLAYS, INC. SPECIFICALLY DISCLAIMS ANY WARRANTIES, INCLUDING, BUT
+   NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+   FOR A PARTICULAR PURPOSE. THE SOFTWARE AND ACCOMPANYING
+   DOCUMENTATION, IF ANY, PROVIDED HEREUNDER IS PROVIDED "AS IS".
+   KENT DISPLAYS, INC. HAS NO OBLIGATION TO PROVIDE MAINTENANCE, SUPPORT,
+   UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
+ *****************************************************************************/
+
+
+// Conventions used in this library:
+//   1) A '1' in any bit represents an optically light pixel; '0' indicates an optically dark one.
+//   2) Cursor position is represented in X,Y coordinates starting with (0,0) at the top-left corner of the display.
+//   3) Active image area (128x32) does not include the 'special' 3-pixel active border around the display.
+//   4) Pixmaps (graphics) consist of a linear byte array whose first two elements are the image width and height, respectively. (same as GLCD pixmap format)
+//   5) Fonts are in GLCD fixed-width font format.
+
+// Limitations in this version:
+//   Text and graphics must align on an 8-pixel vertical boundary.
+//   Variable-width GLCD fonts are not supported.
+
+
+
+
 extern "C" {
 	#include <avr/pgmspace.h>
 }
@@ -8,8 +73,6 @@ extern "C" {
 // Unfortunately, its full command set is secret until consumer hardware comes out which flexes all its functionality
 // and its ribbon cable is reachable by probes...
 // (or they actually publish a real datasheet ... don't hold yer breath :-)
-
-
 
 
 // Temperature compensation data element definition.
@@ -24,12 +87,13 @@ typedef struct
   uint8_t Voltage;
 }
 tcTableEntry;
-#define TEMP_PTS (sizeof(tcTable)/sizeof(tcTable[0])) // # of table entries.
-#define TEMP_MAX (tcTable[0].Temp+5) // Max update temp (C).
 
-
-
-
+// # of table entries.
+#define TEMP_PTS (sizeof(tcTable)/sizeof(tcTable[0]))
+// Max update temp (C).
+#define TEMP_MAX (tcTable[0].Temp+5)
+// Min update temp (C).
+#define TEMP_MIN (tcTable[TEMP_PTS-1].Temp)
 // Temp Comp Data
 //
 // White/Blue KLC-19.
@@ -97,10 +161,8 @@ static const tcTableEntry tcTable[] =
 
 
 
-NVLCD::NVLCD(byte _cs_pin, byte _busy_pin, byte _c_d_pin, byte _reset_pin, byte _pwr_pin, byte _gnd_pin, byte _sck_pin, byte _mosi_pin)
+NVLCD::NVLCD(int8_t _cs_pin, int8_t _busy_pin, int8_t _c_d_pin, int8_t _reset_pin, int8_t _pwr_pin, int8_t _gnd_pin, int8_t _sck_pin, int8_t _mosi_pin)
 {
-
-
     cs_pin = _cs_pin;
     busy_pin = _busy_pin;
     c_d_pin = _c_d_pin;
@@ -110,7 +172,7 @@ NVLCD::NVLCD(byte _cs_pin, byte _busy_pin, byte _c_d_pin, byte _reset_pin, byte 
     sck_pin = _sck_pin;
     mosi_pin = _mosi_pin;
 
-    if(sck_pin > 127 || mosi_pin > 127) // if user enters nonvalid or '-1' value
+    if(sck_pin < 0 || mosi_pin < 0) // if user enters nonvalid or '-1' value
     {
       // attempt to use SPI standard library
       spi_putc_type = SPI_PUTC_STD_SPI;
@@ -120,11 +182,9 @@ NVLCD::NVLCD(byte _cs_pin, byte _busy_pin, byte _c_d_pin, byte _reset_pin, byte 
       spi_putc_type = SPI_PUTC_BITBANG;
     }
     init();
-
-    //pWriteFunc = NULL; //&lcd_bitbang;
-
 }
-NVLCD::NVLCD(byte _cs_pin, byte _busy_pin, byte _c_d_pin, byte _reset_pin, byte _pwr_pin, byte _gnd_pin)
+
+NVLCD::NVLCD(int8_t _cs_pin, int8_t _busy_pin, int8_t _c_d_pin, int8_t _reset_pin, int8_t _pwr_pin, int8_t _gnd_pin)
 {
     cs_pin = _cs_pin;
     busy_pin = _busy_pin;
@@ -132,13 +192,12 @@ NVLCD::NVLCD(byte _cs_pin, byte _busy_pin, byte _c_d_pin, byte _reset_pin, byte 
     reset_pin = _reset_pin;
     pwr_pin = _pwr_pin;
     gnd_pin = _gnd_pin;
-    sck_pin = 0;
-    mosi_pin = 0;
+    sck_pin = -1;
+    mosi_pin = -1;
 
     // No SPI pins given for constructor, so attempt to use SPI standard library
     spi_putc_type = SPI_PUTC_STD_SPI;
 
-    //pWriteFunc = _pWriteFunc;
     init();
 
 }
@@ -148,18 +207,28 @@ NVLCD::NVLCD(byte _cs_pin, byte _busy_pin, byte _c_d_pin, byte _reset_pin, byte 
 
 void NVLCD::set_font(Font_t _font)
 {
-   font = _font;
-
-   if(font != NULL)
+   //Serial.print("Font addr:");
+   //Serial.println(_font, HEX);
+   if(_font != NULL)
    {
+        if( (pgm_read_byte(&_font[FONT_LENGTH]) != 0) || (pgm_read_byte(&_font[FONT_LENGTH+1]) != 0))
+        {
+             Serial.println("Variable-width fonts not supported.");
+             Serial.println(_font[FONT_LENGTH], DEC);
+             Serial.println(_font[FONT_LENGTH+1], DEC);
+             return;
+        }
         // retrieve important font parameters so they don't have to be fetched for each character written
-
+        font = _font;
         font_width = pgm_read_byte(&font[FONT_FIXED_WIDTH]);
         font_height = pgm_read_byte(&font[FONT_HEIGHT]);
         font_first_char = pgm_read_byte(&font[FONT_FIRST_CHAR]);
-
-        //byte char_width_bytes = width; // 1 byte -> 1 col (8 px vertical)
         char_height_bytes = (font_height+7) / 8; // round up
+
+   }
+   else
+   {
+        Serial.println("font ptr was null!");
    }
 }
 
@@ -167,7 +236,7 @@ void NVLCD::set_font(Font_t _font)
 void NVLCD::reset(void)
 {
   digitalWrite(reset_pin, LOW);  // assert \RST
-  delay(2);  // delay 2ms...128x32 only requires ~20uS
+  delay(1);  // delay 1ms...128x32 only requires ~20uS
   digitalWrite(reset_pin, HIGH); // deassert \RST
 }
 
@@ -181,7 +250,11 @@ void NVLCD::init(void)
     h_flip_value = 0;
     v_flip_value = 0;
     invert_value = 0x00;
+    border_value = 0xFE; // only 0x00 and 0xFF are officially allowed. Special value tells commit() this hasn't been initialized yet.
     font = NULL;
+    cursor_x = 0;
+    cursor_y = 0;
+
 
     if(spi_putc_type == SPI_PUTC_STD_SPI)
     {
@@ -200,13 +273,15 @@ void NVLCD::init(void)
 
 void NVLCD::on(void)
 {
-  if(pwr_pin < 128)
+  if(pwr_pin > -1)
      digitalWrite(pwr_pin, HIGH);
 }
 void NVLCD::off(void)
 {
-  if(pwr_pin < 128)
+  if(pwr_pin > -1)
      digitalWrite(pwr_pin, LOW);
+
+  border_value = 0xFE; // invalidate border setting
 }
 
 void NVLCD::set_temp_comp(int v)
@@ -246,10 +321,67 @@ void NVLCD::set_invert(byte v)
   }
 }
 
-void NVLCD::set_border(byte)
+void NVLCD::set_border(byte border)
 {
-  // Hunh...so it appears the 'border' lines are just ordinary pixels. Funk this :-)
+  //The edgemost pixels on the physical glass are 'special' (stretched) and intended to be used as a border.
+  // Like an LCD, applying any torque or pressure to the glass will cause discoloration. But since the material
+  // in these displays is bistable, discolorations outside the electrically active area are permanent.
+  // For a normal customer application, the special/border pixels give a safe zone between the effective display
+  // area and the potentially discolored outer reaches, which are normally hidden behind a product's bezel.
+
+  // Note that the stretched size notwithstanding, these are normal addressable pixels and can (if desired) be
+  // controlled individually.
+  unsigned char i;
+
+  if(border==0)
+      {border_value = 0x00;}
+  else
+      {border_value = 0xFF;}
+
+
+  // Since we map (0,0) as the start of the active image area, must use the raw page/col addressing here.
+  // In the remapped form, the border starts at a negative address.
+
+  // top of border
+  set_raw_page(1);
+  set_raw_col(0);
+
+  lcd_mode_data();
+
+  for(i=1; i<N_COLS+3; i++)
+  {
+     lcd_write(border_value);
+  }
+
+
+  // bottom of border
+  set_raw_page(N_PAGES+2); // page after active display area
+  set_raw_col(0);
+
+  lcd_mode_data();
+
+  for(i=1; i<N_COLS+3; i++)
+  {
+     lcd_write(border_value);
+  }
+
+
+  // sides
+  for(i=0; i<N_PAGES+3; i++)
+  {
+      set_raw_page(i);
+     set_raw_col(1);
+     lcd_mode_data();
+     lcd_write(border_value);
+
+     set_raw_col(N_COLS+2);
+     lcd_mode_data();
+     lcd_write(border_value);
+  }
+
 }
+
+
 void NVLCD::set_h_flip(byte v)
 {
   // Horizontal display flipping (reverse SEG scanning direction)
@@ -261,23 +393,24 @@ void NVLCD::set_v_flip(byte v)
   v_flip_value = v;
 }
 
-void NVLCD::commit()
+void NVLCD::commit(void)
 {
   // Creature comfort wrapper: commit entire valid DDRAM to screen
-  commit(0, 0, N_ROWS, 0);
+  commit(0, 0, N_COLS, N_ROWS);
 }
 
 void NVLCD::commit(int x1, int y1, int x2, int y2)
 {
 
-// Commit DDRAM contents from row x1 to row x2 to physical glass
-// NOTE: y1, y2 parameters are accepted in case future controllers can update rectangular areas (unlikely, but these folks never cease to amaze)
+// Commit DDRAM contents from row y1 to row y2 to physical glass
+// NOTE: x1, x2 parameters are accepted in case future controllers can update rectangular areas (unlikely, but these folks never cease to amaze)
 //       Currently these parameters are ignored (only full lines updated at a time)
 
 // The following code blantantly filched from Kent Displays' datasheet.
 // CHANGES: 1) Allow independent V and H flipping modes
 //          2) fix DUMMY_ROWS (TODO)
 //          3) wrap TC table lookup into image commit
+//          4) Partial display update correctly offset from cursor position.
 
 // Function: DriveImage
 // Purpose: Updates display with image data in driver RAM using
@@ -322,12 +455,23 @@ void NVLCD::commit(int x1, int y1, int x2, int y2)
   uint8_t offset;
   uint8_t startLineCmd;
 
-  uint8_t firstRow = x1;
-  uint8_t numRows = x2 - x1;
+  uint8_t firstRow = y1;
+  uint8_t numRows = y2 - y1;
+
+  // If border still has not been initialized, initialize it now.
+  if(border_value==0xFE)
+  {
+     set_border(0); // default to background color
+  }
+
 
   // Get /*and upload*/ current TC data
 
-  if ((temp_comp_value >= tcTable[TEMP_PTS-1].Temp) && (temp_comp_value <= TEMP_MAX))
+  // Assuming Kent has some legitimate reason for their code ignoring the update request if the temp.
+  // is out of range rather than use the nearest valid temp. Maybe it's bad for the display?
+
+  //if ((temp_comp_value >= tcTable[TEMP_PTS-1].Temp) && (temp_comp_value <= TEMP_MAX))
+  if ((temp_comp_value >= TEMP_MIN) && (temp_comp_value <= TEMP_MAX))
   {
     // Search TC table to find the drive parameters.
     for (int i = 0; i < TEMP_PTS; i++)
@@ -349,28 +493,31 @@ void NVLCD::commit(int x1, int y1, int x2, int y2)
     }
   }
 
+  // If using border, this bit of logic sets the range of update rows.
+  // N_ROWS and N_COLS then are set to the number of 'normal' v/h pixels.
+  // Otherwise, set the N_ROWS and N_COLS to the total # of addressable pixels and skip 15 lines always.
+
 
   // Map first row to first driver COMMON.
-  //if ((firstRow == 0) && (numRows == 32)) // Full screen?
-  //{
+  if ((firstRow == 0) && (numRows == 32)) // Full screen?
+  {
     // Include top/bottom active frame in update area. Thus the image spans
     // 34 COM lines, COM15 to COM48.
-   // firstRow = 15;
-   // numRows = 34;
-  //}
-  //else // Partial screen.
-  //{
+    firstRow = 15;
+    numRows = 34;
+  }
+  else // Partial screen.
+  {
     // First image row is on the COM line that is 16 inward from the edge
     // COM16 or COM47.
-    //firstRow += 16;
-    firstRow += 15;
- // }
+    firstRow += 16;
+  }
 
 
   // Compute image location parameters. V flip (COM) is handled during drive; H flip (SEG) is handled during writing image data.
   if(v_flip_value)
   {
-    offset = 0x40 - firstRow; // Location on display.
+    offset = 64 - firstRow; // Location on display.
   }
   else
   {
@@ -378,9 +525,12 @@ void NVLCD::commit(int x1, int y1, int x2, int y2)
     if (firstRow == 15) // Offset needs special treatment when we
       offset += DUMMY_ROWS; // do a full image in non-remapped mode.
   }
-  startLineCmd = 0x40 + ((firstRow==15) ? 15 : 16); // Location in display RAM.
+  //startLineCmd = 64 + ((firstRow==15) ? 15 : 16); // Location in display RAM.
+  //Minor divergence from Kent's reference code: make partial update DDRAM/glass mapping consistent with fullscreen
+  startLineCmd = 0x40 + firstRow; // Location in display RAM.
 
-  // Initialization code. Mostly voodoo since there is no public controller datasheet.
+
+  // Controller initialization code. Mostly voodoo since there is no public controller datasheet.
 
   lcd_mode_cmd(); // switch to command mode
 
@@ -517,99 +667,90 @@ void NVLCD::home(void)
 {
   set_cursor(0,0);
 }
-void NVLCD::set_page(byte page)
+
+// Functions to set raw / unremapped page or column.
+// The normal user-accessible functions should use the remapped version which compensates for the border and
+// unused DDRAM pages.
+
+void NVLCD::set_raw_page(byte page)
 {
   // This and many other LCD operate in 'pages' (each input byte supplies data for 8 vertical lines)
   // There is no concept of discrete 'lines' unless you get ugly splitting up data between pages.
   // FIXME: Try to harmonize lines and pages...
   lcd_mode_cmd();
-  lcd_write(PAGE_ADD | (page+1));
-  // 'page+2' to skip unused and border frame.
+  lcd_write(PAGE_ADD | (page));
 }
-
-
-
-
-
-
-void NVLCD::set_col(byte col)
+void NVLCD::set_raw_col(byte col)
 {
   lcd_mode_cmd();
   lcd_write (COL_MSN | (col >> 4));
   lcd_write (COL_LSN | (col & 0x0F));
 }
 
-void NVLCD::set_cursor(byte row, byte col)
+void NVLCD::set_page(byte page)
 {
-  set_page(row/8);
-  set_col(col);
+  // This and many other LCD operate in 'pages' (each input byte supplies data for 8 vertical lines)
+  // There is no concept of discrete 'lines' unless you get ugly splitting up data between pages.
+  // FIXME: Try to harmonize lines and pages...
+  lcd_mode_cmd();
+  lcd_write(PAGE_ADD | (page+2)); // +1 for use-border-as-image
+  // 'page+2' to skip unused and border frame.
+}
+
+
+void NVLCD::set_col(byte col)
+{
+  lcd_mode_cmd();
+  col += 2; // HACK: Compensate for border pixels
+  lcd_write (COL_MSN | (col >> 4));
+  lcd_write (COL_LSN | (col & 0x0F));
+}
+
+void NVLCD::set_cursor(byte x, byte y)
+{
+  cursor_x = x;
+  cursor_y = y;
+  // FIXME: Allow per-row setting
+  set_page(y/8);
+  set_col(x);
 }
 
 /*------ Text and Graphic Functions -----*/
 
 void NVLCD::putch(byte c)
 {
-     Serial.print("Got byte: ");
-     Serial.print(c);
-     // only supporting fixed size font for now
-     //if( font[FONT_LENGTH] == 0 && font[FONT_LENGTH+1] == 0)
-     {
+     //Serial.print("Got byte: ");
+     //Serial.print(c);
 
+      if(c >= font_first_char)
+      {
+         // resolve ASCII value to character index in font
+         c = c - font_first_char;
 
-        //byte width = pgm_read_byte(&font[FONT_FIXED_WIDTH]);
-        //byte height = pgm_read_byte(&font[FONT_HEIGHT]);
-        //byte first_char = pgm_read_byte(&font[FONT_FIRST_CHAR]);
+         int row=0;
+         int col=0;
+         // First byte: c * (char_width_bytes * char_height_bytes)
+         for(row=0; row < char_height_bytes; row++)
+         {
+            set_page((cursor_y/8) + row);
+            set_col(cursor_x);
+            lcd_mode_data();
+            for(col=0; col < font_width; col++)
+            {
+              //int k = ((c * font_width * char_height_bytes) + (row * font_width) + col)    + 6; // 6 fluff bytes at the start of each font
 
-        //Serial.print("\nWidth: ");
-        //Serial.print(width, HEX);
-        //Serial.print("  Height: ");
-        //Serial.print(height, HEX);
+              //byte cha = pgm_read_byte(&font[k]);
+              //lcd_write(cha ^ invert_value); // DDRAM pointer auto-increments, so no need to re-set col per write of consecutive columns.
 
-	byte line=0;
-	byte temp=0;
+              lcd_write((pgm_read_byte(&font[((c * font_width * char_height_bytes) + (row * font_width) + col) + 6])) ^ invert_value); // DDRAM pointer auto-increments, so no need to re-set col per write of consecutive columns.
 
+            }  // col
 
-        if(c >= font_first_char)
-        {
-           // resolve ASCII value to character index in font
-           c = c - font_first_char;
+         } // row
 
-           // index the *byte* in font corresponding to this index
-           // NB: fonts can be > 8 pixels tall and/or wide.
+         cursor_x += font_width + 1; // advance cursor to end of character just written, plus 1 col for padding
 
-           //byte char_width_bytes = width; // 1 byte -> 1 col (8 px vertical)
-           //byte char_height_bytes = (height+7) / 8; // round up
-
-           //byte char_total_bytes
-
-           // >8 wide -> (char, char+1, ... in font data)
-           // >8 tall -> multiple lines (char, char+1, ... in font data)
-
-           // First byte: c * (char_width_bytes * char_height_bytes)
-           for(int row=0; row < char_height_bytes; row++)
-           {
-              // FIXME: advance cursor column here if multiline fonts...
-              for(int col=0; col < font_width; col++)
-              {
-                //Serial.print("row=");
-                //Serial.print(row, DEC);
-                //Serial.print("  col=");
-                //Serial.print(col, DEC);
-                int k = (c * (font_width * char_height_bytes) + (row * char_height_bytes) + col)    + 6; // 6 fluff bytes at the start of each font
-                //Serial.print("  idx=");
-                //Serial.print(k, DEC);
-
-                byte cha = pgm_read_byte(&font[k]);
-                //Serial.print("  val=");
-                //Serial.print(cha, HEX);
-                //Serial.println(" ");
-                lcd_write(cha ^ invert_value);
-              }
-           }
-
-        }
-
-     }
+      }
 
 }
 
@@ -621,15 +762,14 @@ void NVLCD::putch_P(PGM_P pc)
 void NVLCD::puts(const char * s)
 {
      // print a string from RAM
-  Serial.print("String addr:");
-  Serial.print((long int)s, HEX);
-  Serial.println();
+  //Serial.print("String addr:");
+  //Serial.print((long int)s, HEX);
+  //Serial.println();
     set_seg_mapping();
     lcd_mode_data();
     while(*s != 0)
     {
        putch(*s);
-       //*s++;
        s++;
     }
 }
@@ -641,9 +781,9 @@ void NVLCD::puts_P(PGM_P s)
 {
      // print a string from code memory
     byte c;
-  Serial.print("String addr:");
-  Serial.print((long int)s, HEX);
-  Serial.println();
+  //Serial.print("String addr:");
+  //Serial.print((long int)s, HEX);
+  //Serial.println();
 
     set_seg_mapping();
     lcd_mode_data();
@@ -655,9 +795,7 @@ void NVLCD::puts_P(PGM_P s)
 }
 
 
-
-//void NVLCD::pixmap(char * pImg, int col, int page) // NOTE: 'Page' is an 8px vertical boundary.
-void NVLCD::pixmap(int row, int col, const char * pImg) // NOTE: 'Page' is an 8px vertical boundary.
+void NVLCD::pixmap(int x, int y, const char * pImg)
 {
 	byte xsize=pImg[0];
 	byte ysize=pImg[1];
@@ -671,8 +809,8 @@ void NVLCD::pixmap(int row, int col, const char * pImg) // NOTE: 'Page' is an 8p
 	for (yy=0; yy<ysize/8; yy++)
 	{
 		// handle pages
-		set_page(yy+(row/8));
-		set_col(col);
+		set_page(yy+(y/8));
+		set_col(x);
                 lcd_mode_data();
 		for (xx=0; xx<xsize; xx++)
 		{
@@ -682,8 +820,7 @@ void NVLCD::pixmap(int row, int col, const char * pImg) // NOTE: 'Page' is an 8p
 	}
 }
 
-//void NVLCD::pixmap_P(PGM_P pImg, int col, int page) // NOTE: 'Page' is an 8px vertical boundary.
-void NVLCD::pixmap_P(int row, int col, PGM_P pImg) // NOTE: 'Page' is an 8px vertical boundary.
+void NVLCD::pixmap_P(int x, int y, PGM_P pImg)
 {
         byte xsize = pgm_read_byte(&pImg[0]);
         byte ysize = pgm_read_byte(&pImg[1]);
@@ -696,8 +833,8 @@ void NVLCD::pixmap_P(int row, int col, PGM_P pImg) // NOTE: 'Page' is an 8px ver
 	for (yy=0; yy<ysize/8; yy++)
 	{
 		// handle pages
-		set_page(yy+(row/8));
-		set_col(col);
+		set_page(yy+(y/8));
+		set_col(x);
                 lcd_mode_data();
 		for (xx=0; xx<xsize; xx++)
 		{
@@ -713,6 +850,8 @@ void NVLCD::pixmap_P(int row, int col, PGM_P pImg) // NOTE: 'Page' is an 8px ver
 
 void NVLCD::cr(void) // display-specific carriage return implementation
 {
+   cursor_y += font_height;
+   cursor_x = 0;
 }
 
 // Serial write or bitbang LCD serial data using I/O lines.
@@ -788,12 +927,12 @@ void NVLCD::wait_for_ready()
 
 void NVLCD::init_pins()
 {
-  if(gnd_pin < 128)
+  if(gnd_pin > -1)
   {
       pinMode(gnd_pin, OUTPUT);
       digitalWrite(gnd_pin, LOW);
   }
-  if(pwr_pin < 128)
+  if(pwr_pin > -1)
   {
       pinMode(pwr_pin, OUTPUT);
       digitalWrite(pwr_pin, LOW);
@@ -818,8 +957,8 @@ void NVLCD::init_pins()
  */
 void NVLCD::write(uint8_t c) // for Print base class
 {
-     Serial.print(" write:");
-     Serial.print(c);
+     //Serial.print(" write:");
+     //Serial.print(c);
      putch(c);
 }
 

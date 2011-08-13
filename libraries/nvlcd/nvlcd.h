@@ -16,18 +16,16 @@ extern "C" {
 #if defined WIRING
 #include <WPrint.h> // used when deriving this class in Wiring
 #else
-#include "Print.h" // used when deriving this class in Arduino 
+#include "Print.h" // used when deriving this class in Arduino
 #endif
 
 #ifndef USE_ARDUINO_FLASHSTR
 // these should be replaced when Arduino supports FLASH strings in the base print class
 #include <avr/pgmspace.h>
-//typedef class _FlashString {} *FLASHSTRING;
-//#define flashStr(x) ((FLASHSTRING)(PSTR((x))))
 #define print_p(x) puts_P(PSTR(x))
 #endif
 
-// Font Indices
+// Font Data Indices for GLCD-compatible fonts
 #define FONT_LENGTH			0
 #define FONT_FIXED_WIDTH	2
 #define FONT_HEIGHT			3
@@ -37,7 +35,7 @@ extern "C" {
 
 // the following returns true if the given font is fixed width
 // zero length is flag indicating fixed width font (array does not contain width data entries)
-#define isFixedWidthFont(font)  (FontRead(font+FONT_LENGTH) == 0 && FontRead(font+FONT_LENGTH+1) == 0))
+//#define isFixedWidthFont(font)  (FontRead(font+FONT_LENGTH) == 0 && FontRead(font+FONT_LENGTH+1) == 0))
 
 typedef const uint8_t* Font_t;
 
@@ -49,18 +47,21 @@ typedef const uint8_t* Font_t;
 // So, it seems the 'border' pixels are just pixels, and so the display resolution is actually a little higher than claimed
 // (although border pixels are 'stretched' in one direction or the other, e.g. abnormally wide)
 // Probably to provide a buffer zone for commercial applications' bezels to hide any discolorations outside the active area.
-//#define N_ROWS 32
-#define N_ROWS 48
-//#define N_COLS 128
-#define N_COLS 132
+#define N_ROWS 32
+
+#define N_COLS 128
+
+// if you are hell-bent on using the stretched pixels as ordinary image pixels, the below are the 'real' screen resolution
+//#define N_ROWS 48
+//#define N_COLS 132
 
 #define DUMMY_ROWS 0
            // FIXME: CHECKME: This constant is used in Kent's datasheet example, but never defined. What should its value be? "Seems to work" without it so far.
 
-// These may no longer be used
-#define BYTES_PER_IMAGE (N_ROWS*N_COLS/8)
 #define N_PAGES (N_ROWS/8)
-#define BYTES_PER_PAGE (BYTES_PER_IMAGE/N_PAGES)
+// These may no longer be used
+//#define BYTES_PER_IMAGE (N_ROWS*N_COLS/8)
+//#define BYTES_PER_PAGE (BYTES_PER_IMAGE/N_PAGES)
 
 // set DDRAM starting addresses
 #define COL_LSN 0x00 // Set Lower Column Address
@@ -92,13 +93,13 @@ typedef const uint8_t* Font_t;
 class NVLCD : public Print
 {
     public:
-        NVLCD(byte cs_pin, byte busy_pin, byte c_d_pin, byte reset_pin, byte pwr_pin, byte gnd_pin, byte sck_pin, byte mosi_pin);
-        NVLCD(byte cs_pin, byte busy_pin, byte c_d_pin, byte reset_pin, byte pwr_pin, byte gnd_pin);
+        NVLCD(int8_t cs_pin, int8_t busy_pin, int8_t c_d_pin, int8_t reset_pin, int8_t pwr_pin, int8_t gnd_pin, int8_t sck_pin, int8_t mosi_pin);
+        NVLCD(int8_t cs_pin, int8_t busy_pin, int8_t c_d_pin, int8_t reset_pin, int8_t pwr_pin, int8_t gnd_pin);
 
         void set_font(Font_t _font);
 
         void reset(void);
-        void init(void);
+
         void on(void);
         void off(void);
         void set_temp_comp(int);
@@ -107,40 +108,47 @@ class NVLCD : public Print
         void set_border(byte);
         void set_h_flip(byte);
         void set_v_flip(byte);
-        void commit();
+        void commit(void);
         void commit(int, int, int, int);
-        void set_seg_mapping();
+
 
 
         void home(void);
         void set_page(byte page);
         void set_col(byte col);
+
+
+
         void set_cursor(byte row, byte col);
         void putch(byte c);
         void putch_P(PGM_P pc);
         void puts(const char *s);
         void puts_P(PGM_P s);
-        void pixmap(int row, int col, const char * pImg);
-        void pixmap_P(int row, int col, PGM_P pImg);
+        void pixmap(int x, int y, const char * pImg);
+        void pixmap_P(int x, int y, PGM_P pImg);
 
-        void lcd_mode_data();
 
-        void lcd_write(byte);
-        void lcd_bitbang(byte); // default write function
+
 
     private:
     	void write(uint8_t); // for Print base class
-    	
+        void init(void);
+        void set_seg_mapping(void);
+        void lcd_write(byte);
+        void lcd_bitbang(byte); // default write function
+
         void cr(void); // HW carriage return
 
-        //void lcd_send_cmd(byte);
-        //void lcd_send_data(byte);
         void lcd_mode_cmd();
+        void lcd_mode_data();
 
         void select();
         void deselect();
         void wait_for_ready();
         void init_pins();
+
+        void set_raw_page(byte page);
+        void set_raw_col(byte col);
 
         Font_t font;
 
@@ -156,6 +164,7 @@ class NVLCD : public Print
         byte h_flip_value;
         byte v_flip_value;
         byte invert_value;
+        byte border_value;
         byte spi_putc_type;
 
 
@@ -163,6 +172,10 @@ class NVLCD : public Print
         byte font_height;
         byte font_first_char;
         byte char_height_bytes;
+
+
+        unsigned char cursor_x;
+        unsigned char cursor_y;
 
 };
 
