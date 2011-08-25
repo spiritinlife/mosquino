@@ -166,32 +166,32 @@ const uint8_t PROGMEM digital_pin_to_bit_mask_PGM[] =
 	_BV(7), //D
 	_BV(3), //C
 	_BV(4), //C
-	_BV(3), //C
-	_BV(2), //C
+	_BV(3), //D
+	_BV(2), //D
 	_BV(5), /* 8, port C */
-	_BV(6), //B
-	_BV(7), //B
+	_BV(6), //C
+	_BV(7), //C
 	_BV(3), //B
 	_BV(7), //B
 	_BV(6), //B
 	_BV(5), //B
 	_BV(4), //B
 	_BV(0), /* 16, port A */
-	_BV(1),
-	_BV(2),
-	_BV(3),
-	_BV(4),
-	_BV(5),
-	_BV(6),
-	_BV(7),
-	_BV(0), /* 24, everything not on the shield headers */ //B INT2
-	_BV(1), //C  SCL
-	_BV(2), //C  SDA
-	_BV(0), //C  LED
-	_BV(1), //D  RX0
-	_BV(2), //D  TX0
-	_BV(0), //D  PGOOD
-	_BV(1)  //D  BUS_SENSE
+	_BV(1), //A
+	_BV(2), //A
+	_BV(3), //A
+	_BV(4), //A
+	_BV(5), //A
+	_BV(6), //A
+	_BV(7), //A
+	_BV(0), /* 24, everything not on the shield headers */ //B PGOOD\
+	_BV(1), //B  PFULL\
+	_BV(2), //B  INT2\
+	_BV(0), //C  SCL
+	_BV(1), //C  SDA
+	_BV(2), //C  LED
+	_BV(0), //D  RX0
+	_BV(1)  //D  TX0
 };
 
 const uint8_t PROGMEM digital_pin_to_timer_PGM[] =
