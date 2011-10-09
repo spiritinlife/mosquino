@@ -41,7 +41,9 @@ int analogRead(uint8_t pin)
 {
 	uint8_t low, high;
 
-#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+#if defined(MOSQUINO_AEDES)
+	if (pin >= 16) pin -= 16; // allow for channel or pin numbers
+#else #if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
 	if (pin >= 54) pin -= 54; // allow for channel or pin numbers
 #else
 	if (pin >= 14) pin -= 14; // allow for channel or pin numbers

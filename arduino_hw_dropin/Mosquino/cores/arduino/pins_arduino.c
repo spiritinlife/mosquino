@@ -176,14 +176,14 @@ const uint8_t PROGMEM digital_pin_to_bit_mask_PGM[] =
 	_BV(6), //B
 	_BV(5), //B
 	_BV(4), //B
-	_BV(0), /* 16, port A */
-	_BV(1), //A
-	_BV(2), //A
-	_BV(3), //A
-	_BV(4), //A
-	_BV(5), //A
+	_BV(7), /* 16, port A */
 	_BV(6), //A
-	_BV(7), //A
+	_BV(5), //A
+	_BV(4), //A
+	_BV(3), //A
+	_BV(2), //A
+	_BV(1), //A
+	_BV(0), //A
 	_BV(0), /* 24, everything not on the shield headers */ //B PGOOD\
 	_BV(1), //B  PFULL\
 	_BV(2), //B  INT2\
