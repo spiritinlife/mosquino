@@ -33,17 +33,16 @@ long map(long, long, long, long, long);
 
 
 #if defined(MOSQUINO_AEDES)
-const static uint8_t A0 = 23;
-const static uint8_t A1 = 22;
-const static uint8_t A2 = 21;
-const static uint8_t A3 = 20;
-const static uint8_t A4 = 19;
-const static uint8_t A5 = 18;
-const static uint8_t A6 = 17;
-const static uint8_t A7 = 16;
+const static uint8_t A0 = 16;
+const static uint8_t A1 = 17;
+const static uint8_t A2 = 18;
+const static uint8_t A3 = 19;
+const static uint8_t A4 = 20;
+const static uint8_t A5 = 21;
+const static uint8_t A6 = 22;
+const static uint8_t A7 = 23;
 
-
-#else if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+#elif (defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__))
 const static uint8_t A0 = 54;
 const static uint8_t A1 = 55;
 const static uint8_t A2 = 56;

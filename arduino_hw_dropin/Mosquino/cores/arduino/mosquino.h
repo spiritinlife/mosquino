@@ -36,7 +36,7 @@
 // board variant. Aedes uses '644/1284/etc. and features PGOOD, PFULL and DS1337 realtime clock. Yes, they are all named after mosquito species.
 #define MOSQUINO_AEDES
 // PCB revision. It is very unlikely anyone will ever need to reference this, but it's here. (if they do, it probably means I did something stupid.)
-#define MOSQUINO_AEDES_2
+#define MOSQUINO_AEDES_4
 
 
 // There is a major limitation that user code or libraries cannot bounds-check that the pin # supplied to a e.g. digitalWrite() function is a valid pin number,
@@ -60,6 +60,18 @@
 #define PIN_PFULL PIN_POWER_FULL
 
 
+// The POWER_GOOD and POWER_FULL signals of Mosquino are both active-low, which is counterintuitive, and probably confusing for some users.
+// For clarity and futureproofing, these wrappers will return the correct polarity.
+
+// In an early prototype, there was a dedicated BUS_SENSE pin whose only function was to detect the USB attached state.
+// This function is now multiplexed with the POWER_FULL signal (attachment to a probably wall-powered PC is 'unlimited' power for our purposes).
+// As before (but moreso), user code should actually check for a connection as part of its comm protocol rather than blindly assuming
+// bus_sense() / power_full() means a PC is present and a client is listening.
+
+
+#define bus_sense() power_full()
+#define power_good() (!(digitalRead(PIN_POWER_GOOD)))
+#define power_full() (!(digitalRead(PIN_POWER_FULL)))
 
 
 // Magic incantation to temporarily disable the ATmega's BOD (Brown Out Detect) during sleep mode, dropping sleep power consumption from ~20uA to <<1uA.
@@ -112,4 +124,14 @@ do { \
 
 #define set_clock_div(x)    do { CLKPR = (1<<CLKPCE); CLKPR = (x);} while(0)
 
+
+
+
+
+
+
+
 #endif
+
+
+

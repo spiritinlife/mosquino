@@ -26,6 +26,8 @@
 
 #include "wiring_private.h"
 #include "pins_arduino.h"
+// Some ugliness so that Mosquino board definition is available here...
+#include "mosquino.h"
 
 uint8_t analog_reference = DEFAULT;
 
@@ -42,8 +44,8 @@ int analogRead(uint8_t pin)
 	uint8_t low, high;
 
 #if defined(MOSQUINO_AEDES)
-	if (pin >= 16) pin -= 16; // allow for channel or pin numbers
-#else #if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+	if (pin >= 16 && pin <= 23) pin = 7 - (pin - 16); // allow for channel or pin numbers
+#elif defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
 	if (pin >= 54) pin -= 54; // allow for channel or pin numbers
 #else
 	if (pin >= 14) pin -= 14; // allow for channel or pin numbers
