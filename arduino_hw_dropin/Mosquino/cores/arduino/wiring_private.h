@@ -27,12 +27,10 @@
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include <avr/signal.h>
-#include <avr/delay.h>
 #include <stdio.h>
 #include <stdarg.h>
 
-#include "wiring.h"
+#include "Arduino.h"
 
 #ifdef __cplusplus
 extern "C"{
@@ -48,8 +46,23 @@ extern "C"{
 #define EXTERNAL_INT_0 0
 #define EXTERNAL_INT_1 1
 #define EXTERNAL_INT_2 2
+#define EXTERNAL_INT_3 3
+#define EXTERNAL_INT_4 4
+#define EXTERNAL_INT_5 5
+#define EXTERNAL_INT_6 6
+#define EXTERNAL_INT_7 7
 
+#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
+#define EXTERNAL_NUM_INTERRUPTS 8
+// Add correct interrupt # support for the '644p/a. Hmm... while we're at it, a better way to test for its presence than naming specific chip flavors.
+// ISC2x only present on chips with INT2 support. 20120404 / tgipson
+//#elif defined(__AVR_ATmega644P__) || defined(__AVR_ATmega1284P__)
+#elif defined(ISC20)
 #define EXTERNAL_NUM_INTERRUPTS 3
+
+#else
+#define EXTERNAL_NUM_INTERRUPTS 2
+#endif
 
 typedef void (*voidFuncPtr)(void);
 

@@ -1,7 +1,10 @@
 ##############################################################
 
-mosquino.name=Mosquino
-mosquino.upload.protocol=stk500
+mosquino.name=Mosquino 1.0
+#mosquino.upload.protocol=stk500
+# ^^^ doesn't work any longer in 1.0 (returns device signature 0x000000) (wtf?!), try this...
+# Ref: http://arduino.cc/forum/index.php?action=printpage;topic=91580.0
+mosquino.upload.protocol=arduino
 mosquino.upload.maximum_size=63488
 mosquino.upload.speed=19200
 # external osc, CKDIV8 off
@@ -19,3 +22,4 @@ mosquino.build.mcu=atmega644p
 #ATMEGA644 limited to 4MHz at 1.8V; ensure higher voltage and you can go faster...
 mosquino.build.f_cpu=4000000L
 mosquino.build.core=arduino
+mosquino.build.variant=standard
