@@ -172,7 +172,12 @@ void delayMicroseconds(unsigned int us)
 	// the following loop takes half of a microsecond (4 cycles)
 	// per iteration, so execute it twice for each microsecond of
 	// delay requested.
+
+	// ...but for Mosquino operation (4MHz default), only execute once
+
+	#if F_CPU < 8000000L
 	us <<= 1;
+	#endif
     
 	// partially compensate for the time taken by the preceeding commands.
 	// we can't subtract any more than this or we'd overflow w/ small delays.

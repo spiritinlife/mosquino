@@ -106,83 +106,6 @@ const static uint8_t A7 = 23;
 
 
 
-
-// --------------- Mosquino-specific -------------------------------
-
-
-// The POWER_GOOD and POWER_FULL signals of Mosquino are both active-low, which is counterintuitive, and probably confusing for some users.
-// For clarity and futureproofing, these wrappers will return the correct polarity.
-
-// In an early prototype, there was a dedicated BUS_SENSE pin whose only function was to detect the USB attached state.
-// This function is now multiplexed with the POWER_FULL signal (attachment to a probably wall-powered PC is 'unlimited' power for our purposes).
-// As before (but moreso), user code should actually check for a connection as part of its comm protocol rather than blindly assuming
-// bus_sense() / power_full() means a PC is present and a client is listening.
-
-
-#define bus_sense() power_full()
-#define power_good() (!(digitalRead(PIN_POWER_GOOD)))
-#define power_full() (!(digitalRead(PIN_POWER_FULL)))
-
-
-// Magic incantation to temporarily disable the ATmega's BOD (Brown Out Detect) during sleep mode, dropping sleep power consumption from ~20uA to <<1uA.
-// After performing the ritual, user code has a limited time (a few cycles) to execute a SLEEP before BOD-during-sleep is re-enabled. So, it is
-// probably a good idea to provide a wrapper which immediately follows this with a SLEEP. In fact, lets make sleeping without BOD the default behavior
-// since a proper Mosquino powersupply will usually disconnect the load (AVR) on undervoltage..
-
-// this "should" be in avr/sleep.h already, but as of 0022 Arduino still distributes a very old version that seemingly predates it! Sooo...
-#ifndef sleep_bod_disable()
-#define sleep_bod_disable() \
-do { \
-   uint8_t tempreg; \
-   __asm__ __volatile__("in %[tempreg], %[mcucr]" "\n\t" \
-                        "ori %[tempreg], %[bods_bodse]" "\n\t" \
-                        "out %[mcucr], %[tempreg]" "\n\t" \
-                        "andi %[tempreg], %[not_bodse]" "\n\t" \
-                        "out %[mcucr], %[tempreg]" \
-                        : [tempreg] "=&d" (tempreg) \
-                        : [mcucr] "I" _SFR_IO_ADDR(MCUCR), \
-                          [bods_bodse] "i" (_BV(BODS) | _BV(BODSE)), \
-                          [not_bodse] "i" (~_BV(BODSE))); \
- } while (0)
-#endif
-
-// wrappers and (un)friendly names for AVR sleep functions. We can keep set_sleep_mode() as-is...
-#define sleep() do {sleep_enable(); sleep_bod_disable(); sleep_cpu();} while(0)
-#define sleep_with_bod() do {sleep_enable(); sleep_cpu();} while(0)
-
-
-// General note: Wrapping macros in a "do{...} while(0)" structure is a hack that ensures its name can be used as a normal function
-// (e.g. trailing semicolon) without problems. The compiler optimizes away the superfluous condition, so this doesn't affect the
-// actual code generated.
-// http://gcc.gnu.org/onlinedocs/cpp/Swallowing-the-Semicolon.html#Swallowing-the-Semicolon
-
-
-
-
-// Support for manipulating the clock speed on the fly.
-
-#define CLOCK_DIV_1     0x00
-#define CLOCK_DIV_2     0x01
-#define CLOCK_DIV_4     0x02
-#define CLOCK_DIV_8     0x03
-#define CLOCK_DIV_16    0x04
-#define CLOCK_DIV_32    0x05
-#define CLOCK_DIV_64    0x06
-#define CLOCK_DIV_128   0x07
-#define CLOCK_DIV_256   0x08
-// remaining values are reserved.
-
-#define set_clock_div(x)    do { CLKPR = (1<<CLKPCE); CLKPR = (x);} while(0)
-
-
-// --------------- END Mosquino-specific -------------------------------
-
-
-
-
-
-
-
 // On the '644, the low 4 bits of the PCICR register are interrupt enables for [bit=0, 1, 2, 3] = [PORTA, PORTB, PORTC, PORTD] respectively.
 #define digitalPinToPCICR(p)    (((p) >= 0 && (p) <= 31) ? (&PCICR) : ((uint8_t *)0))
 
@@ -416,5 +339,76 @@ const uint8_t PROGMEM digital_pin_to_timer_PGM[] = {
 };
 
 #endif
+
+// --------------- Mosquino-specific -------------------------------
+
+
+// The POWER_GOOD and POWER_FULL signals of Mosquino are both active-low, which is counterintuitive, and probably confusing for some users.
+// For clarity and futureproofing, these wrappers will return the correct polarity.
+
+// In an early prototype, there was a dedicated BUS_SENSE pin whose only function was to detect the USB attached state.
+// This function is now multiplexed with the POWER_FULL signal (attachment to a probably wall-powered PC is 'unlimited' power for our purposes).
+// As before (but moreso), user code should actually check for a connection as part of its comm protocol rather than blindly assuming
+// bus_sense() / power_full() means a PC is present and a client is listening.
+
+
+#define bus_sense() power_full()
+#define power_good() (!(digitalRead(PIN_POWER_GOOD)))
+#define power_full() (!(digitalRead(PIN_POWER_FULL)))
+
+
+// Magic incantation to temporarily disable the ATmega's BOD (Brown Out Detect) during sleep mode, dropping sleep power consumption from ~20uA to <<1uA.
+// After performing the ritual, user code has a limited time (a few cycles) to execute a SLEEP before BOD-during-sleep is re-enabled. So, it is
+// probably a good idea to provide a wrapper which immediately follows this with a SLEEP. In fact, lets make sleeping without BOD the default behavior
+// since a proper Mosquino powersupply will usually disconnect the load (AVR) on undervoltage..
+
+// this "should" be in avr/sleep.h already, but as of 0022 Arduino still distributes a very old version that seemingly predates it! Sooo...
+#ifndef sleep_bod_disable
+//#warning Your AVR-GCC version is ancient
+#define sleep_bod_disable() \
+do { \
+   uint8_t tempreg; \
+   __asm__ __volatile__("in %[tempreg], %[mcucr]" "\n\t" \
+                        "ori %[tempreg], %[bods_bodse]" "\n\t" \
+                        "out %[mcucr], %[tempreg]" "\n\t" \
+                        "andi %[tempreg], %[not_bodse]" "\n\t" \
+                        "out %[mcucr], %[tempreg]" \
+                        : [tempreg] "=&d" (tempreg) \
+                        : [mcucr] "I" _SFR_IO_ADDR(MCUCR), \
+                          [bods_bodse] "i" (_BV(BODS) | _BV(BODSE)), \
+                          [not_bodse] "i" (~_BV(BODSE))); \
+ } while (0)
+#endif
+
+// wrappers and (un)friendly names for AVR sleep functions. We can keep set_sleep_mode() as-is...
+#define sleep() do {sleep_enable(); sleep_bod_disable(); sleep_cpu();} while(0)
+#define sleep_with_bod() do {sleep_enable(); sleep_cpu();} while(0)
+
+
+// General note: Wrapping macros in a "do{...} while(0)" structure is a hack that ensures its name can be used as a normal function
+// (e.g. trailing semicolon) without problems. The compiler optimizes away the superfluous condition, so this doesn't affect the
+// actual code generated.
+// http://gcc.gnu.org/onlinedocs/cpp/Swallowing-the-Semicolon.html#Swallowing-the-Semicolon
+
+
+
+
+// Support for manipulating the clock speed on the fly.
+
+#define CLOCK_DIV_1     0x00
+#define CLOCK_DIV_2     0x01
+#define CLOCK_DIV_4     0x02
+#define CLOCK_DIV_8     0x03
+#define CLOCK_DIV_16    0x04
+#define CLOCK_DIV_32    0x05
+#define CLOCK_DIV_64    0x06
+#define CLOCK_DIV_128   0x07
+#define CLOCK_DIV_256   0x08
+// remaining values are reserved.
+
+#define set_clock_div(x)    do { CLKPR = (1<<CLKPCE); CLKPR = (x);} while(0)
+
+
+// --------------- END Mosquino-specific -------------------------------
 
 #endif
