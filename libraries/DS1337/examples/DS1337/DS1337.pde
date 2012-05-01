@@ -14,8 +14,8 @@
  */
 
 
-int ledPin =  27;    // LED connected to digital pin 13
-int INT_PIN = 24; // INTerrupt pin from the RTC. On Mosquino boards, RTC is tied to INT2
+int ledPin =  PIN_LED;    // LED connected to digital pin 13
+int INT_PIN = PIN_INT2; // INTerrupt pin from the RTC. On Mosquino boards, RTC is tied to INT2
 int int_number = 2;
 
 DS1337 RTC = DS1337();
@@ -117,8 +117,8 @@ void test_basic()
     printTime(0);
     Serial.println("  (we'll never forget)");
     
-    Serial.println("Setting time using epoch seconds: 2024784000 (midnight on 2/29/2064)");
-    RTC.writeTime(2024784000);
+    Serial.println("Setting time using epoch seconds: 2971468800 (midnight on 2/29/2064)");
+    RTC.writeTime(2971468800);
     delay(500);  
     RTC.readTime();    
     Serial.print("Read back: ");
@@ -154,6 +154,7 @@ void test_basic()
 void test_interrupts()
 {
   Serial.println("Setting a 1Hz periodic alarm interrupt to sleep in between. Watchen das blinkenlights...");
+  Serial.flush();
   
   // Steps to use an alarm interrupt:
   // 1) attach an interrupt handler (it can be blank if you just want to wake)
@@ -191,11 +192,12 @@ void test_interrupts()
   detachInterrupt(int_number);
   
   Serial.println("Going to snooze for 5 seconds...");
-  snooze(5);
+  Serial.flush();
+  RTC.snooze(5);
   Serial.println("...and wake up again.");  
 }
 
-byte test_epoch_seconds()
+void test_epoch_seconds()
 {
   // Output the time calculated in epoch seconds at midnight for every day between 1/1/2000 and 12/31/2099.
   // Also, convert the result back to a date/time and make sure it matches the original value.
@@ -212,8 +214,8 @@ byte test_epoch_seconds()
   unsigned char day;
   unsigned int year;
   
-  unsigned long old_epoch_seconds = 0;
-  unsigned long new_epoch_seconds = 1;
+  unsigned long old_epoch_seconds = 946684800;
+  unsigned long new_epoch_seconds = 946684800 + 1;
   
   Serial.println("Going to output and check epoch seconds at midnight on every day \n  from 1/1/2000 to 12/31/2099. This will take a long time! (overnight)\n  You probably want to capture the output to a file (e.g. hyperterminal). \n  Press SPACE to continue or any other key to skip.\n");
   Serial.flush();
@@ -224,9 +226,9 @@ byte test_epoch_seconds()
     Serial.println("Date, Seconds Since Epoch, Consistency Check Date, Consistency Check Result");
 
 
-    RTC.writeTime(0); // reset time to epoch
+    RTC.writeTime(old_epoch_seconds); // reset time to epoch
     RTC.setAlarmRepeat(EVERY_DAY);
-    RTC.writeAlarm(0); // ensure alarm starts at a valid value too
+    RTC.writeAlarm(old_epoch_seconds); // ensure alarm starts at a valid value too
 
     RTC.enable_interrupt(); // make RTC generate a pulse every time one 'day' passes
     
@@ -281,31 +283,6 @@ byte test_epoch_seconds()
   }
 }
 
-void snooze(unsigned long secondsToSnooze)
-{ 
-  // Given a value in secondsToSnooze, set an alarm for that many seconds into the future and go to sleep.
-  // The alarm can be set for a maximum of 28-31 days into the future - it doesn't have settings for months or years.
-  
-  RTC.readTime(); // update RTC library's buffers to contain the current time.
-                  // Remember most functions (including epoch seconds stuff) work on what's in the buffer, not what's in the chip.
-
-  
-  RTC.setAlarmRepeat(EVERY_MONTH); // There is no DS1337 setting for 'alarm once' - once in a month is the most restrictive it gets.
-
-  RTC.writeAlarm(RTC.date_to_epoch_seconds() + secondsToSnooze);
- 
-  attachInterrupt(int_number, nap, FALLING);
-  RTC.enable_interrupt();
-  
-  delay(3); // wait >2 byte times for any pending Tx bytes to finish writing
-  
-  sleep_cpu(); // sleep. Will we waked by next alarm interrupt
- 
-  RTC.clear_interrupt(); // tell RTC to clear its interrupt flag and drop the INT line
-  RTC.disable_interrupt(); // ensure we stop receiving interrupts
-  detachInterrupt(int_number); // disconnect INT2 from the current interrupt handler.
-  
-}
 
 void printTime(byte type)
 {

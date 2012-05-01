@@ -7,11 +7,23 @@
 #define DS1337_h
 
 // include types & constants of Wiring core API
-#include <WProgram.h>
+#if defined(ARDUINO) && ARDUINO >= 100
+#include <Arduino.h> 
+#define I2C_READ	Wire.read
+#define I2C_WRITE	Wire.write
+#else
+#include <WProgram.h> 
 #include <WConstants.h>
+#define I2C_READ	Wire.receive
+#define I2C_WRITE	Wire.send
+#endif
 
 // include types & constants of Wire ic2 lib
 #include <Wire.h>
+
+// Mosquino has the RTC interrupt pin tied to INT2 for alarm/snooze functions
+#define RTC_INT_NUMBER 2
+
 
 // indices within the rtc_bcd[] buffer
 #define DS1337_SEC	0
@@ -77,15 +89,9 @@
 #define EVERY_MONTH        B00000000
 
 
-/* typedef struct {
-  unsigned int year;
-  unsigned char month;
-  unsigned char day;
-  unsigned char dayOfWeek;
-  unsigned char hour;
-  unsigned char minute;
-  unsigned char second;
-} TIME; */
+
+
+typedef unsigned long time_t;
 
 
 // library interface description
@@ -99,9 +105,9 @@ class DS1337
 		unsigned char alarm_is_set();
 		//unsigned char time_is_valid();
 
-		unsigned char enable_interrupt();
-		unsigned char disable_interrupt();
-		unsigned char clear_interrupt();
+		void enable_interrupt();
+		void disable_interrupt();
+		void clear_interrupt();
 
 		void    readTime();
 		void    readAlarm();
@@ -112,7 +118,6 @@ class DS1337
                 void    setAlarmRepeat(byte repeat);
 
 
-		//void	getTime(int *);
                 unsigned char getSeconds();
                 unsigned char getMinutes();
                 unsigned char getHours();
@@ -122,11 +127,10 @@ class DS1337
                 unsigned int getYears();
                 unsigned long date_to_epoch_seconds(unsigned int year, byte month, byte day, byte hour, byte minute, byte second);
                 unsigned long date_to_epoch_seconds();
-                void epoch_seconds_to_date(unsigned long);
-                //void snooze(unsigned long secondsToSnooze);
-                //unsigned long date2seconds();
+                void epoch_seconds_to_date(unsigned long);								
+                void snooze(unsigned long secondsToSnooze);
+				void custom_snooze(unsigned long secondsToSnooze);
 
-                //void writeTime(int *);
 
                 void setSeconds(unsigned char);
                 void setMinutes(unsigned char);
@@ -141,7 +145,7 @@ class DS1337
 		void	stop(void);
 		unsigned char getRegister(unsigned char registerNumber);
 		void	setRegister(unsigned char registerNumber, unsigned char registerValue);
-		//void	unsetRegister(unsigned char registerNumber, unsigned char registerMask);
+
 
 	// library-accessible "private" interface
 	private:

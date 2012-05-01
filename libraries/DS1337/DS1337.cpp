@@ -1,16 +1,33 @@
-
-
-
+/*
+ Yet-Another DS1337 RTC Library
+ By Tim Gipson (drmn4ea at google's mail)
+ 
+ Based loosely on mattt and xSmurf's RTC library at (http://www.arduino.cc/cgi-bin/yabb2/YaBB.pl?num=1191209057/0)
+ epoch_seconds_to_date() function based on this Dallas/Maxim application note: http://www.maxim-ic.com/app-notes/index.mvp/id/517
+ 
+ This library is written for use with the Mosquino (http://code.google.com/p/mosquino/),
+ but should be adaptable to other boards with no/minimal changes 
+ (mainly just changing the RTC_INT_NUMBER in DS1337.h if different, or modifying the alarm 
+ functions to work without interrupts if needed).
+ 
+*/
 
 extern "C" {
-//	#include <Wire/Wire.h>
-	#include <Wire.h>
-	#include <avr/pgmspace.h>
+
+	#include <avr/power.h>
+	#include <avr/sleep.h>
+
+	// Dummy "interrupt handler" for sleep to wake up to on alarm interrupt
+	void _dummy_int_handler(void)
+	{
+
+	}
+	
 }
 
+//#include <Arduino.h>
 #include "DS1337.h"
-//#include "programStrings.h"
-
+#include <Wire.h>
 
 // NOTE: To keep the math from getting even more lengthy/annoying than it already is, the following constraints are imposed:
 //   1) All times are in 24-hour format (military time)
@@ -21,7 +38,7 @@ extern "C" {
 
 
 // Cumulative number of days elapsed at the start of each month, assuming a normal (non-leap) year.
-unsigned int monthdays[] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
+const unsigned int monthdays[] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
 
 DS1337::DS1337()
 {
@@ -35,7 +52,7 @@ void DS1337::readTime(void)
 // use the Wire lib to connect to tho rtc
 // reset the register pointer to zero
 	Wire.beginTransmission(DS1337_CTRL_ID);
-	Wire.send(0x00);
+	I2C_WRITE((uint8_t)0x00); // Explicit cast is to hack around http://code.google.com/p/arduino/issues/detail?id=527
 	Wire.endTransmission();
 
 // request the 7 bytes of data    (secs, min, hr, dow, date. mth, yr)
@@ -44,7 +61,7 @@ void DS1337::readTime(void)
 	{
 	// store data in raw bcd format
 		if (Wire.available())
-			rtc_bcd[i]=Wire.receive();
+			rtc_bcd[i]=I2C_READ();
 	}
 }
 
@@ -56,7 +73,7 @@ void DS1337::readAlarm(void)
 // use the Wire lib to connect to tho rtc
 // point to start of Alarm1 registers
 	Wire.beginTransmission(DS1337_CTRL_ID);
-	Wire.send(DS1337_ARLM1);
+	I2C_WRITE((uint8_t)DS1337_ARLM1);
 	Wire.endTransmission();
 
 // request the *4* bytes of data (secs, min, hr, dow/date). Note the format is nearly identical, except for the choice of dayOfWeek vs. date,
@@ -66,8 +83,10 @@ void DS1337::readAlarm(void)
 	{
                 // store data in raw bcd format
 		if (Wire.available())
-                        temp = Wire.receive();
-                        rtc_bcd[i] = temp & B01111111;
+		{
+			temp = I2C_READ();
+			rtc_bcd[i] = temp & B01111111;
+		}
 	}
 
 	// 4th byte read may contain either a date or DayOfWeek, depending on the value of the DY/DT flag.
@@ -88,20 +107,16 @@ void DS1337::readAlarm(void)
 
 void DS1337::writeTime(void)
 {
-        //byte temp;
 	Wire.beginTransmission(DS1337_CTRL_ID);
-	Wire.send(0x00); // reset register pointer
+	I2C_WRITE((uint8_t)0x00); // reset register pointer
 	for(int i=0; i<7; i++)
 	{
-		Wire.send(rtc_bcd[i]);
+		I2C_WRITE(rtc_bcd[i]);
 	}
 	Wire.endTransmission();
 
 	// clear the Oscillator Stop Flag
         setRegister(DS1337_STATUS, getRegister(DS1337_STATUS) & !DS1337_STATUS_OSF);
-        //temp = getRegister(DS1337_STATUS);
-        //temp &= (!DS1337_STATUS_OSF);
-        //setRegister(DS1337_STATUS, temp);
 }
 
 void DS1337::writeTime(unsigned long sse)
@@ -117,22 +132,22 @@ void DS1337::writeTime(unsigned long sse)
 void DS1337::writeAlarm(void)
 {
 	Wire.beginTransmission(DS1337_CTRL_ID);
-	Wire.send(DS1337_ARLM1); // set register pointer
+	I2C_WRITE((uint8_t)DS1337_ARLM1); // set register pointer
 
-        Wire.send(rtc_bcd[DS1337_SEC] | ((alarm_repeat & B00000001 ) << 7)); // A1M1
-        Wire.send(rtc_bcd[DS1337_MIN] | ((alarm_repeat & B00000010 ) << 6)); // A1M2
-        Wire.send(rtc_bcd[DS1337_HR] | ((alarm_repeat & B00000100 ) << 5)); // A1M3
+        I2C_WRITE(rtc_bcd[DS1337_SEC] | ((alarm_repeat & B00000001 ) << 7)); // A1M1
+        I2C_WRITE(rtc_bcd[DS1337_MIN] | ((alarm_repeat & B00000010 ) << 6)); // A1M2
+        I2C_WRITE(rtc_bcd[DS1337_HR] | ((alarm_repeat & B00000100 ) << 5)); // A1M3
 
         // Check if we are using date or DayOfWeek and send the appropriate value
         if(alarm_repeat & B00001000) // DayOfWeek
         {
             // send DOW as 4th alarm reg byte
-            Wire.send(rtc_bcd[DS1337_DOW] | ((alarm_repeat & B00011000 ) << 3)); // A1M4 and DY/DT
+            I2C_WRITE(rtc_bcd[DS1337_DOW] | ((alarm_repeat & B00011000 ) << 3)); // A1M4 and DY/DT
         }
         else // date
         {
             // send date as 4th alarm reg byte
-            Wire.send(rtc_bcd[DS1337_DATE] | ((alarm_repeat & B00011000 ) << 3)); // A1M4 and DY/DT
+            I2C_WRITE(rtc_bcd[DS1337_DATE] | ((alarm_repeat & B00011000 ) << 3)); // A1M4 and DY/DT
         }
 
 	Wire.endTransmission();
@@ -151,32 +166,23 @@ void DS1337::setAlarmRepeat(byte repeat)
 }
 
 
-// Decided to let the user implement any needed snooze function, since we don't know in advance if they are currently handling the interrupt,
-// and if we optionally handle it ourselves, switching around pointers between member and user functions here will get messy...
-
-/* void DS1337::snooze(unsigned long secondsToSnooze)
-{
-...
-} */
-
-
 unsigned char DS1337::getRegister(unsigned char registerNumber)
 {
 	Wire.beginTransmission(DS1337_CTRL_ID);
-	Wire.send(registerNumber);
+	I2C_WRITE(registerNumber);
 	Wire.endTransmission();
 
 	Wire.requestFrom(DS1337_CTRL_ID, 1);
 
-	return Wire.receive();
+	return I2C_READ();
 }
 
 void DS1337::setRegister(unsigned char registerNumber, unsigned char value)
 {
 	Wire.beginTransmission(DS1337_CTRL_ID);
-	Wire.send(registerNumber); // set register pointer
+	I2C_WRITE(registerNumber); // set register pointer
 
-	Wire.send(value);
+	I2C_WRITE(value);
 
 	Wire.endTransmission();
 }
@@ -194,18 +200,18 @@ unsigned char DS1337::alarm_is_set()
   return asdf;
 }
 
-unsigned char DS1337::enable_interrupt()
+void DS1337::enable_interrupt()
 {
    clear_interrupt();
    setRegister(DS1337_SP, getRegister(DS1337_SP) | DS1337_SP_INTCN | DS1337_SP_A1IE); // map alarm interrupt to INT1 and enable interrupt
 }
 
-unsigned char DS1337::disable_interrupt()
+void DS1337::disable_interrupt()
 {
    setRegister(DS1337_SP, getRegister(DS1337_SP) & !DS1337_SP_A1IE);
 }
 
-unsigned char DS1337::clear_interrupt()
+void DS1337::clear_interrupt()
 {
    setRegister(DS1337_STATUS, getRegister(DS1337_STATUS) & !DS1337_STATUS_A1F);
 }
@@ -271,9 +277,10 @@ unsigned long DS1337::date_to_epoch_seconds(unsigned int year, byte month, byte 
   unsigned long sse = (((unsigned long)year)*365*24*60*60)   +   ((((unsigned long)year+3)>>2) + ((unsigned long)year%4==0 && (unsigned long)month>2))*24*60*60   +   \
          ((unsigned long)monthdays[month-1] + (unsigned long)day-1) *24*60*60   +   ((unsigned long)hour*60*60)   +   ((unsigned long)minute*60)   + (unsigned long)second;
          // Seconds in days since start of year                      hours                      minutes           sec
-
+  sse += 946684800; // correct for difference between DS1337 epoch and UNIX epoch
   return sse;
 }
+
 
 unsigned long DS1337::date_to_epoch_seconds()
 {
@@ -282,84 +289,183 @@ unsigned long DS1337::date_to_epoch_seconds()
 }
 
 
-void DS1337::epoch_seconds_to_date(unsigned long binary)
+
+void DS1337::epoch_seconds_to_date(unsigned long seconds_left)
 {
    // This routine taken from Dallas/Maxim application note 517
    // http://www.maxim-ic.com/app-notes/index.mvp/id/517
    // Arn't the fastest thing, but it produces correct results.
-   // Slightly modified for epoch date of 1/1/2000.
 
-   // TODO: Optimize (especially eliminate/fake as much sluggish long-division as possible); eliminate redundant variables
+   // NOTE: The earliest date that can be represented by the DS1337 is 1/1/2000 (946684800 in Unix epoch seconds).
+   // Passing an earlier Unix time stamp will fail quietly here (produce a date of 0/0/00), 
+   // which will probably make your application angry.
 
-   unsigned long hour;
-   unsigned long day;
-   unsigned long minute;
-   unsigned long second;
+   // ALSO NOTE: This has been optimized some to minimize redundant variables, with the side-effect
+   // of making it much harder to understand. Please refer to the original appnote above
+   // if you are trying to learn from it :-)
+
+
+   //unsigned long hour;
+   //unsigned long day;
+   //unsigned long minute;
+   //unsigned long second;
    unsigned long month;
-   unsigned long year;
+   //unsigned long year;
 
-   unsigned long whole_minutes;
-   unsigned long whole_hours;
-   unsigned long whole_days;
-   unsigned long whole_days_since_1968;
+	unsigned long seconds_left_2;
+   //unsigned long whole_minutes;
+   //unsigned long whole_hours;
+   //unsigned long whole_days;
+   //unsigned long whole_days_since_1968;
    unsigned long leap_year_periods;
    unsigned long days_since_current_lyear;
-   unsigned long whole_years;
+   //unsigned long whole_years;
    unsigned long days_since_first_of_year;
    unsigned long days_to_month;
-   unsigned long day_of_week;
+   //unsigned long day_of_week;
 
-   whole_minutes = binary / 60;
-   second = binary - (60 * whole_minutes);                 // leftover seconds
+   if(seconds_left >= 946684800)
+   {
+	   seconds_left -= 946684800; // correct for difference between DS1337 and UNIX epochs.
 
-   whole_hours  = whole_minutes / 60;
-   minute = whole_minutes - (60 * whole_hours);            // leftover minutes
+	   seconds_left_2 = seconds_left / 60; // seconds_left_2 = "whole_minutes"
+	   rtc_bcd[DS1337_SEC] = bin2bcd(seconds_left - (60 * seconds_left_2));                 // leftover seconds
 
-   whole_days   = whole_hours / 24;
-   hour         = whole_hours - (24 * whole_days);         // leftover hours
+	   seconds_left = seconds_left_2 / 60; // seconds_left = "whole_hours"
+	   rtc_bcd[DS1337_MIN] = bin2bcd(seconds_left_2 - (60 * seconds_left));            // leftover minutes
 
-   whole_days_since_1968 = whole_days;// + 365 + 366;
-   leap_year_periods = whole_days_since_1968 / ((4 * 365) + 1);
+	   seconds_left_2 = seconds_left / 24; //seconds_left_2 = "whole_days"
+	   rtc_bcd[DS1337_HR] = bin2bcd(seconds_left - (24 * seconds_left_2));         // leftover hours
 
-   days_since_current_lyear = whole_days_since_1968 % ((4 * 365) + 1);
+	   //whole_days_since_1968 = whole_days;// + 365 + 366;	// seconds_left_2 = "whole_days" = "whole_days_since_1968"
+	   leap_year_periods = seconds_left_2 / ((4 * 365) + 1);
 
-   // if days are after a current leap year then add a leap year period
-   if ((days_since_current_lyear >= (31 + 29))) {
-      leap_year_periods++;
+	   days_since_current_lyear = seconds_left_2 % ((4 * 365) + 1);
+
+	   // if days are after a current leap year then add a leap year period
+	   if ((days_since_current_lyear >= (31 + 29))) {
+		  leap_year_periods++;
+	   }
+	   seconds_left = (seconds_left_2 - leap_year_periods) / 365; // seconds_left = "whole_years"
+	   days_since_first_of_year = seconds_left_2 - (seconds_left * 365) - leap_year_periods;
+
+	   if ((days_since_current_lyear <= 365) && (days_since_current_lyear >= 60)) {
+		  days_since_first_of_year++;
+	   }
+	   //year = seconds_left; // + 68;
+
+
+		// seconds_left = "year"
+		//seconds_left_2 = "month"
+	   // walk across monthdays[] to find what month it is based on how many days have passed
+	   //   within the current year
+	   month = 13;
+	   days_to_month = 366;
+	   while (days_since_first_of_year < days_to_month) {
+		   month--;
+		   days_to_month = monthdays[month-1];
+		   if ((month > 2) && ((seconds_left % 4) == 0)) {
+			   days_to_month++;
+			}
+	   }
+	   
+	   rtc_bcd[DS1337_DATE] = bin2bcd( days_since_first_of_year - days_to_month + 1);
+
+	   rtc_bcd[DS1337_DOW] = bin2bcd((seconds_left_2  + 4) % 7);
+
+
+	   //rtc_bcd[DS1337_SEC] = bin2bcd(second);
+	   //rtc_bcd[DS1337_MIN] = bin2bcd(minute);
+	   //rtc_bcd[DS1337_HR] = bin2bcd(hour);
+	   //rtc_bcd[DS1337_DATE] = bin2bcd(day);
+	   //rtc_bcd[DS1337_DOW] = bin2bcd(day_of_week);
+	   rtc_bcd[DS1337_MTH] = bin2bcd(month);
+	   rtc_bcd[DS1337_YR] = bin2bcd(seconds_left);
    }
-   whole_years = (whole_days_since_1968 - leap_year_periods) / 365;
-   days_since_first_of_year = whole_days_since_1968 - (whole_years * 365) - leap_year_periods;
+	else
+	{
+	// else: "invalid" (< year 2000) epoch format.
+	// 'Best' way to handle this is to zero out the returned date. 
+	
+	   rtc_bcd[DS1337_SEC] = 0; //0x00 binary = 0x00 BCD
+	   rtc_bcd[DS1337_MIN] = 0;
+	   rtc_bcd[DS1337_HR] = 0;
+	   rtc_bcd[DS1337_DATE] = 0;
+	   rtc_bcd[DS1337_DOW] = 0;
+	   rtc_bcd[DS1337_MTH] = 0;
+	   rtc_bcd[DS1337_YR] = 0;
+	}
 
-   if ((days_since_current_lyear <= 365) && (days_since_current_lyear >= 60)) {
-      days_since_first_of_year++;
-   }
-   year = whole_years;// + 68;
-
-   // walk across monthdays[] to find what month it is based on how many days have passed
-   //   within the current year
-   month = 13;
-   days_to_month = 366;
-   while (days_since_first_of_year < days_to_month) {
-       month--;
-       days_to_month = monthdays[month-1];
-       if ((month > 2) && ((year % 4) == 0)) {
-           days_to_month++;
-        }
-   }
-   day = days_since_first_of_year - days_to_month + 1;
-
-   day_of_week = (whole_days  + 4) % 7;
-
-
-   rtc_bcd[DS1337_SEC] = bin2bcd(second);
-   rtc_bcd[DS1337_MIN] = bin2bcd(minute);
-   rtc_bcd[DS1337_HR] = bin2bcd(hour);
-   rtc_bcd[DS1337_DATE] = bin2bcd(day);
-   rtc_bcd[DS1337_DOW] = bin2bcd(day_of_week);
-   rtc_bcd[DS1337_MTH] = bin2bcd(month);
-   rtc_bcd[DS1337_YR] = bin2bcd(year);
 }
 
+
+
+
+
+void DS1337::snooze(unsigned long secondsToSnooze)
+{ 
+  // Given a value in secondsToSnooze, set an alarm for that many seconds into the future and go to sleep.
+  // The alarm can be set for a maximum of 28-31 days into the future - it doesn't have settings for months or years.
+  
+  uint8_t sleep_reg_temp;
+  
+  readTime(); // update RTC library's buffers to contain the current time.
+                  // Remember most functions (including epoch seconds stuff) work on what's in the buffer, not what's in the chip.
+
+  
+  setAlarmRepeat(EVERY_MONTH); // There is no DS1337 setting for 'alarm once' - once in a month is the most restrictive it gets.
+
+  writeAlarm(date_to_epoch_seconds() + secondsToSnooze);
+ 
+  attachInterrupt(RTC_INT_NUMBER, _dummy_int_handler, FALLING);  
+  enable_interrupt();
+  
+  // the default snooze behavior is to put the CPU all the way to sleep. In case the user has previously set a different sleep mode,
+  // save the entry sleep mode and restore it after sleeping. NOTE, set_sleep_mode() in avr/sleep.h is actually a giant device-specific mess
+  // (making trying to implement a 'get_sleep_mode'-type function that works for all devices an equally nasty mess), but this should cover MOST
+  // of the ones likely to be used with Arduino. For those others, user will have to set the desired sleep mode by hand.
+  
+  #if defined(_SLEEP_CONTROL_REG)
+  sleep_reg_temp = _SLEEP_CONTROL_REG;
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+  #endif
+  
+  sleep_cpu(); // sleep. Will we waked by next alarm interrupt
+ 
+  #if defined(_SLEEP_CONTROL_REG)
+  _SLEEP_CONTROL_REG = sleep_reg_temp;
+  #endif
+  
+  clear_interrupt(); // tell RTC to clear its interrupt flag and drop the INT line
+  disable_interrupt(); // ensure we stop receiving interrupts
+  detachInterrupt(2); // disconnect INT2 from the current interrupt handler.
+  
+}
+
+void DS1337::custom_snooze(unsigned long secondsToSnooze)
+{ 
+  // Same as snooze(), but do not change the current sleep mode. Use to sleep at a custom sleep mode other than ...PWR_DOWN.
+  // Intentional use of a lighter sleep mode means the user is probably expecting/handling other interrupts - note of course that
+  // most interrupts will wake the CPU from sleep mode, so the snooze may be shorter than specified in this case.
+   
+  readTime(); // update RTC library's buffers to contain the current time.
+                  // Remember most functions (including epoch seconds stuff) work on what's in the buffer, not what's in the chip.
+
+  
+  setAlarmRepeat(EVERY_MONTH); // There is no DS1337 setting for 'alarm once' - once in a month is the most restrictive it gets.
+
+  writeAlarm(date_to_epoch_seconds() + secondsToSnooze);
+ 
+  attachInterrupt(RTC_INT_NUMBER, _dummy_int_handler, FALLING);  
+  enable_interrupt();
+  
+  sleep_cpu(); // sleep. Will we waked by next alarm interrupt
+ 
+  clear_interrupt(); // tell RTC to clear its interrupt flag and drop the INT line
+  disable_interrupt(); // ensure we stop receiving interrupts
+  detachInterrupt(2); // disconnect INT2 from the current interrupt handler.
+  
+}
 
 void DS1337::setSeconds(unsigned char v)
 {
