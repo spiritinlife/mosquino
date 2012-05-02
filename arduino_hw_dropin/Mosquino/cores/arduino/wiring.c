@@ -175,7 +175,7 @@ void delayMicroseconds(unsigned int us)
 
 	// ...but for Mosquino operation (4MHz default), only execute once
 
-	#if F_CPU < 8000000L
+	#if F_CPU >= 8000000L
 	us <<= 1;
 	#endif
     
