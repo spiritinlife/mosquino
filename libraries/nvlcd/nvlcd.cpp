@@ -61,11 +61,11 @@
 //   Variable-width GLCD fonts are not supported.
 
 
-
-
 extern "C" {
 	#include <avr/pgmspace.h>
 }
+
+
 #include <SPI.h>
 #include "nvlcd.h"
 
@@ -213,9 +213,11 @@ void NVLCD::set_font(Font_t _font)
    {
         if( (pgm_read_byte(&_font[FONT_LENGTH]) != 0) || (pgm_read_byte(&_font[FONT_LENGTH+1]) != 0))
         {
+			#if defined(DEBUG_NVLCD)
              Serial.println("Variable-width fonts not supported.");
              Serial.println(_font[FONT_LENGTH], DEC);
              Serial.println(_font[FONT_LENGTH+1], DEC);
+			 #endif
              return;
         }
         // retrieve important font parameters so they don't have to be fetched for each character written
@@ -228,7 +230,9 @@ void NVLCD::set_font(Font_t _font)
    }
    else
    {
+		#if defined(DEBUG_NVLCD)
         Serial.println("font ptr was null!");
+		#endif
    }
 }
 
@@ -491,6 +495,13 @@ void NVLCD::commit(int x1, int y1, int x2, int y2)
         break;
       }
     }
+  }
+  else
+  {
+	#if defined(DEBUG_NVLCD)
+	Serial.println("Invalid temperature!");
+	#endif
+	return;
   }
 
   // If using border, this bit of logic sets the range of update rows.
@@ -955,10 +966,22 @@ void NVLCD::init_pins()
 /*
  * needed to resolve virtual print functions
  */
+ // NOTE: function changed from void to returning size_t (# bytes written) in Arduino 1.0; handle both cases
+ #if defined(ARDUINO) && ARDUINO >= 100
+size_t NVLCD::write(uint8_t c) // for Print base class 
+{
+     //Serial.print(" write:");
+     //Serial.print(c);
+     putch(c);
+	 return 1;
+}
+ #else
 void NVLCD::write(uint8_t c) // for Print base class
 {
      //Serial.print(" write:");
      //Serial.print(c);
      putch(c);
 }
+#endif
+
 

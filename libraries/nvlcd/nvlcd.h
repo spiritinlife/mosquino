@@ -3,11 +3,18 @@
 
 
 // include types & constants of Wiring core API
+#if defined(ARDUINO) && ARDUINO >= 100
+#include <Arduino.h>
+#else
 #include <WProgram.h>
 #include <WConstants.h>
+#endif
 extern "C" {
 	#include <avr/pgmspace.h>
 }
+
+// Uncomment to allow warnings (Serial.print...) on invalid usage
+#define DEBUG_NVLCD
 
 // Borrow some things from GLCD. Trying to shoehorn this display into GLCD would be a bear; it's just too different.
 // Also, since CPU time is at a premium in a power-optimized design, trying to duplicate/adapt all its advanced features here is not a priority to me ;-)
@@ -131,7 +138,12 @@ class NVLCD : public Print
 
 
     private:
+		#if defined(ARDUINO) && ARDUINO >= 100
+    	size_t write(uint8_t); // for Print base class
+		#else
     	void write(uint8_t); // for Print base class
+		#endif
+
         void init(void);
         void set_seg_mapping(void);
         void lcd_write(byte);
