@@ -23,7 +23,7 @@
 
 // Mosquino has the RTC interrupt pin tied to INT2 for alarm/snooze functions
 #define RTC_INT_NUMBER 2
-
+#define RTC_INT_PIN	PIN_INT2
 
 // indices within the rtc_bcd[] buffer
 #define DS1337_SEC	0

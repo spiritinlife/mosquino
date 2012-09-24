@@ -43,6 +43,8 @@ const unsigned int monthdays[] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 3
 DS1337::DS1337()
 {
 	Wire.begin();
+	pinMode(RTC_INT_PIN, INPUT);
+	digitalWrite(RTC_INT_PIN, HIGH);	// enable software pullup resistor on RTC interrupt pin
 }
 
 // Aquire data from the RTC chip in BCD format
@@ -423,12 +425,15 @@ void DS1337::snooze(unsigned long secondsToSnooze)
   // the default snooze behavior is to put the CPU all the way to sleep. In case the user has previously set a different sleep mode,
   // save the entry sleep mode and restore it after sleeping. NOTE, set_sleep_mode() in avr/sleep.h is actually a giant device-specific mess
   // (making trying to implement a 'get_sleep_mode'-type function that works for all devices an equally nasty mess), but this should cover MOST
-  // of the ones likely to be used with Arduino. For those others, user will have to set the desired sleep mode by hand.
+  // of the ones likely to be used with Arduino. For those others, user will have to (re)set the desired sleep mode by hand.
   
   #if defined(_SLEEP_CONTROL_REG)
   sleep_reg_temp = _SLEEP_CONTROL_REG;
-  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
   #endif
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+  
+  // enable deep sleeping
+  sleep_enable();
   
   sleep_cpu(); // sleep. Will we waked by next alarm interrupt
  
@@ -438,7 +443,7 @@ void DS1337::snooze(unsigned long secondsToSnooze)
   
   clear_interrupt(); // tell RTC to clear its interrupt flag and drop the INT line
   disable_interrupt(); // ensure we stop receiving interrupts
-  detachInterrupt(2); // disconnect INT2 from the current interrupt handler.
+  detachInterrupt(RTC_INT_NUMBER); // disconnect INT2 from the current interrupt handler.
   
 }
 
@@ -459,11 +464,14 @@ void DS1337::custom_snooze(unsigned long secondsToSnooze)
   attachInterrupt(RTC_INT_NUMBER, _dummy_int_handler, FALLING);  
   enable_interrupt();
   
+  // enable deep sleeping
+  sleep_enable();
+  
   sleep_cpu(); // sleep. Will we waked by next alarm interrupt
  
   clear_interrupt(); // tell RTC to clear its interrupt flag and drop the INT line
   disable_interrupt(); // ensure we stop receiving interrupts
-  detachInterrupt(2); // disconnect INT2 from the current interrupt handler.
+  detachInterrupt(RTC_INT_NUMBER); // disconnect INT2 from the current interrupt handler.
   
 }
 
