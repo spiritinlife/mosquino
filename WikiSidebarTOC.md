@@ -1,0 +1,1 @@
+This page is deprecated; please use the [WikiMainTOC](http://code.google.com/p/mosquino/wiki/WikiMainTOC).
